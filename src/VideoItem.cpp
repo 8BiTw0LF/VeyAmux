@@ -7,7 +7,16 @@
 #include <QtQuick/qsgtexture_platform.h>
 #include <vulkan/vulkan.h>
 
-VideoItem::VideoItem(QQuickItem* parent) : QQuickItem(parent) { setFlag(ItemHasContents, true); }
+VideoItem::VideoItem(QQuickItem* parent) : QQuickItem(parent) {
+    setFlag(ItemHasContents, true);
+    // HDR output: the video is drawn through a layer, which is only redrawn when this item is marked dirty. The live
+    // path writes new pictures into the same Vulkan image without touching the item, so mark it every frame.
+    connect(this, &QQuickItem::windowChanged, this, [this](QQuickWindow* w) {
+        if (w) connect(w, &QQuickWindow::afterAnimating, this, [this] {
+            if (player_ && player_->hdrOutputActive() && player_->liveVulkanActive()) update();
+        });
+    });
+}
 
 void VideoItem::setPlayer(QObject* p) {
     auto* b = qobject_cast<PlayerBridge*>(p);
@@ -47,6 +56,8 @@ QSGNode* VideoItem::updatePaintNode(QSGNode* old, UpdatePaintNodeData*) {
         double w = width(), h = width() / a;
         if (h > height()) { h = height(); w = h * a; }
         node->setRect(QRectF((width() - w) / 2, (height() - h) / 2, w, h));
+        // the texture's content changed (new picture in the same image): lets a layer above re-render (HDR output)
+        if (player_->hdrOutputActive()) node->markDirty(QSGNode::DirtyMaterial);
         return node;
     }
     if (node && kind_ == Kind::Live) { delete node; node = nullptr; }

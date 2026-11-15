@@ -6,12 +6,12 @@ Item {
     property real to: 1
     property real value: 0
     property real neutral: NaN         // draws the fill from this value instead of 'from'
-    property color accent: "#ff7a45"
+    property color accent: Theme.accent
     property bool dragging: ma.pressed
     signal moved(real v)
     height: 22
     readonly property real pos: (Math.max(from, Math.min(to, value)) - from) / (to - from)
-    Rectangle { id: track; anchors.verticalCenter: parent.verticalCenter; width: parent.width; height: 4; radius: 2; color: "#2b2e38"
+    Rectangle { id: track; anchors.verticalCenter: parent.verticalCenter; width: parent.width; height: 4; radius: 2; color: Theme.surfaceHover
         Rectangle {
             readonly property real n: isNaN(root.neutral) ? 0 : (root.neutral - root.from) / (root.to - root.from)
             x: Math.min(n, root.pos) * parent.width
@@ -21,7 +21,7 @@ Item {
     }
     Rectangle {
         x: root.pos * (root.width - width); anchors.verticalCenter: parent.verticalCenter
-        width: ma.pressed || ma.containsMouse ? 14 : 12; height: width; radius: width / 2; color: "#ffffff"
+        width: ma.pressed || ma.containsMouse ? 14 : 12; height: width; radius: width / 2; color: Theme.heading
     }
     MouseArea {
         id: ma; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor

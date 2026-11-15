@@ -31,10 +31,40 @@ void LiveVulkan::setStream(int maxHeight, std::function<void(QImage, int)> sink)
     chain_->setStreamMaxHeight(maxHeight);
 }
 
+void LiveVulkan::setRecord(int maxHeight, std::function<void(veyamux::EnhanceChain::RecFrame&&)> sink) {
+    { std::lock_guard l(sinkM_); recSink_ = std::move(sink); }
+    chain_->setRecordMaxHeight(maxHeight);
+}
+
+void LiveVulkan::requestScreenshot(std::function<void(QImage)> cb) {
+    { std::lock_guard l(sinkM_); shotCb_ = std::move(cb); }
+    chain_->requestScreenshot();
+    { std::lock_guard l(m_); redraw_ = true; }   // render the current picture again even if the source is paused
+    if (win_) QMetaObject::invokeMethod(win_, "update", Qt::QueuedConnection);
+}
+
 // Collects the OBS stream copies as soon as the GPU has written them (independent of when Qt renders next).
 void LiveVulkan::streamLoop() {
     std::vector<EnhanceChain::StreamFrame> frames;
+    std::vector<EnhanceChain::RecFrame> rec;
     while (!streamQuit_.load()) {
+        rec.clear();
+        chain_->pollRecord(rec);
+        if (!rec.empty()) {
+            std::function<void(EnhanceChain::RecFrame&&)> rs;
+            { std::lock_guard l(sinkM_); rs = recSink_; }
+            if (rs) for (auto& f : rec) rs(std::move(f));
+        }
+        EnhanceChain::StreamFrame shot;
+        if (chain_->pollScreenshot(shot)) {
+            std::function<void(QImage)> cb;
+            { std::lock_guard l(sinkM_); cb = std::move(shotCb_); shotCb_ = nullptr; }
+            if (cb) {
+                QImage img(shot.w, shot.h, QImage::Format_RGBA8888);
+                for (int y = 0; y < shot.h; ++y) std::memcpy(img.scanLine(y), shot.rgba.data() + size_t(y) * shot.w * 4, size_t(shot.w) * 4);
+                cb(std::move(img));
+            }
+        }
         frames.clear();
         chain_->pollStream(frames);
         if (!frames.empty()) {
@@ -125,6 +155,7 @@ void LiveVulkan::onBeforeRendering() {
     in.data = current_.data.data();
     in.size = current_.data.size();
     in.w = current_.w; in.h = current_.h; in.stride = current_.stride;
+    in.time = current_.captured.time_since_epoch().count() ? current_.captured : std::chrono::steady_clock::now();
 
     win_->beginExternalCommands();
     auto* rif = win_->rendererInterface();
@@ -147,7 +178,23 @@ void LiveVulkan::onBeforeRendering() {
         upError_ = chain_->upError();
     }
     const ImageRes& real = chain_->liveOutput();
-    lastMs_ = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    const auto tEnd = std::chrono::steady_clock::now();
+    lastMs_ = std::chrono::duration<double, std::milli>(tEnd - t0).count();
+    // Time inside VeyAmux: from the capture driver's timestamp to the moment the frame's GPU work is queued, plus the
+    // measured GPU time - i.e. until the picture is ready for the display (scan-out and the card's own delay excluded).
+    {
+        std::lock_guard l(m_);
+        gpuMs_ = chain_->gpuMs();
+        gpuStages_ = chain_->gpuStageMs();
+    }
+    if (current_.captured.time_since_epoch().count()) {
+        const double q = std::chrono::duration<double, std::milli>(tEnd - current_.captured).count();
+        if (q >= 0 && q < 1000) {
+            const double g = std::max(0.0f, chain_->gpuMs());
+            const double v = q + g, o = pipeMs_.load();
+            pipeMs_ = o <= 0 ? v : o + 0.1 * (v - o);
+        }
+    }
     const bool recreated = chain_->liveGeneration() != seenGen_;   // images were recreated (size change)
     seenGen_ = chain_->liveGeneration();
     ++seq_;
@@ -155,7 +202,8 @@ void LiveVulkan::onBeforeRendering() {
     if (qEnvironmentVariableIsSet("VEYAMUX_DEBUG_FG")) {
         static int real = 0;
         ++real;
-        if (real % 10 == 0) qInfo("LiveVulkan: %d frames, capture interval %.1f ms, output %ux%u%s%s", real, frameMs,
+        if (real % 10 == 0) qInfo("LiveVulkan: %d frames, GPU %.3f ms, CPU %.2f ms, capture interval %.1f ms, output %ux%u%s%s", real,
+                                     double(chain_->gpuMs()), lastMs_.load(), frameMs,
                                      chain_->liveOutput().width, chain_->liveOutput().height,
                                      chain_->upError().empty() ? "" : ", upscaling error: ", chain_->upError().c_str());
     }

@@ -2,6 +2,8 @@
 //   demux thread -> video decode thread -> render thread (Vulkan enhancement chain) -> onFrame()
 //                -> audio thread (decode + PulseAudio/PipeWire output; audio is the master clock)
 #pragma once
+#include <algorithm>
+#include <array>
 #include "CaptureSource.h"
 #include "EnhanceChain.h"
 #include <atomic>
@@ -42,6 +44,8 @@ struct EngineStats {
     int outW = 0, outH = 0;
     bool gpuActive = false;
     std::string upError;       // last AMD FSR upscaling error (empty = fine; Lanczos is used meanwhile)
+    float gpuMs = -1;          // measured GPU time (Vulkan timestamps), smoothed; -1 = unknown
+    std::array<float, GpuTimer::kStages> gpuStages{};
 };
 
 class MediaEngine {
@@ -54,6 +58,8 @@ public:
         std::function<void(const std::string&)> onGpuMessage;
         // Zero-copy live path: raw captured frame (YUYV/UYVY/NV12/RGBA), delivered on the capture thread.
         std::function<void(RawFrame&&)> onLiveFrame;
+        // Audio as heard (48 kHz stereo s16, before volume), with the time its first sample plays. Recording tap.
+        std::function<void(const int16_t*, int frames, std::chrono::steady_clock::time_point)> onAudio;
     };
 
     explicit MediaEngine(std::string shaderDir);
@@ -79,6 +85,9 @@ public:
     double position() const;
     void setVolume(float v) { volume_ = v; }
     void setMuted(bool m) { muted_ = m; }
+    // Audio offset in ms, positive = sound later than the picture. Files: -300..+300 (the picture is moved against the
+    // audio clock). Capture: 0..+300 (sound is held back; live audio cannot be played earlier than it arrives).
+    void setAudioDelay(int ms) { audioDelayMs_ = std::clamp(ms, -300, 300); }
     void setEnhance(const EnhanceSettings& s);
     EngineStats stats() const;
     bool hwDecodeActive() const { return hwActive_.load(); }
@@ -92,6 +101,7 @@ private:
     };
     struct Frame {
         std::vector<uint8_t> rgba; int w = 0, h = 0; double pts = 0, aspect = 1; int serial = 0; bool eos = false;
+        int hdr = 0;   // 0 SDR (rgba = RGBA8), 1 PQ, 2 HLG (rgba = RGBA64: 16-bit R'G'B' in BT.2020)
     };
     struct Clock {
         std::mutex m; double pts = 0; std::chrono::steady_clock::time_point wall; bool running = false;
@@ -149,6 +159,7 @@ private:
     std::atomic<bool> endedFired_{false};
     std::atomic<float> volume_{1.0f};
     std::atomic<bool> muted_{false};
+    std::atomic<int> audioDelayMs_{0};
     std::mutex gate_m_; std::condition_variable gate_cv_;   // wakes threads on pause/resume/seek/quit
 
     std::mutex set_m_; EnhanceSettings settings_;

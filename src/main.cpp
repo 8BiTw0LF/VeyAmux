@@ -76,12 +76,17 @@ static UiChoice chooseUi(const QStringList& args, bool probing) {
     if (env == "vulkan" || probing) return UiChoice::Vulkan;
     QSettings q;
     const QString platform = QGuiApplication::platformName();
-    const QString key = "ui/backend/" + platform + "/" + QCoreApplication::applicationVersion();
+    // On Wayland, XWayland is the tested, stable path (Lossless Scaling pacing, resizing). Native Wayland is used only
+    // for HDR output, which XWayland cannot do.
+    const bool native = q.value("enh/hdrOut", false).toBool() && qEnvironmentVariable("VEYAMUX_HDR_OUT") != "0";
+    const QString key = "ui/backend/" + platform + "/" + QCoreApplication::applicationVersion() + (native ? "/native" : "");
     if (args.contains("--reset-ui")) q.remove(key);
     QString cached = q.value(key).toString();
     if (cached.isEmpty()) {
-        if (probeVulkan({})) cached = "vulkan";
-        else if (platform == "wayland" && qEnvironmentVariableIsSet("DISPLAY") && probeVulkan("xcb")) cached = "xcb";
+        const bool canX = platform == "wayland" && qEnvironmentVariableIsSet("DISPLAY");
+        if (!native && canX && probeVulkan("xcb")) cached = "xcb";
+        else if (probeVulkan({})) cached = "vulkan";
+        else if (canX && probeVulkan("xcb")) cached = "xcb";
         else cached = "software";
         q.setValue(key, cached);
     }
@@ -92,13 +97,20 @@ static UiChoice chooseUi(const QStringList& args, bool probing) {
 
 int main(int argc, char** argv) {
     if (!qEnvironmentVariableIsSet("QSG_RENDER_LOOP")) qputenv("QSG_RENDER_LOOP", "threaded");
+    // Qt 6.4's Wayland plugin loads the Vulkan loader as plain "libvulkan.so", which only exists where the -dev package
+    // is installed (not on Bazzite/Fedora Atomic/SteamOS). Without this the native Wayland Vulkan UI fails and VeyAmux
+    // ends up on XWayland (no HDR). The X11 plugin already asks for libvulkan.so.1.
+    // Grey (not sub-pixel/LCD) text antialiasing: sub-pixel text gets coloured fringes when the window is scaled by the
+    // compositor, drawn through a layer (HDR output) or captured.
+    if (!qEnvironmentVariableIsSet("QSG_DISTANCEFIELD_ANTIALIASING")) qputenv("QSG_DISTANCEFIELD_ANTIALIASING", "gray");
+    if (!qEnvironmentVariableIsSet("QT_VULKAN_LIB")) qputenv("QT_VULKAN_LIB", "libvulkan.so.1");
     // libva looks for the host Mesa VAAPI drivers; distros keep them in different places.
     if (!qEnvironmentVariableIsSet("LIBVA_DRIVERS_PATH"))
         qputenv("LIBVA_DRIVERS_PATH", "/usr/lib64/dri:/usr/lib/x86_64-linux-gnu/dri:/usr/lib/dri:/usr/lib/va");
 
     QCoreApplication::setOrganizationName("VeyAmux");
     QCoreApplication::setApplicationName("VeyAmux");
-    QCoreApplication::setApplicationVersion("2.1.5-linux14");
+    QCoreApplication::setApplicationVersion("2.1.5-linux15");
     // The program was called Veyra before: carry the old settings over once (the old folder is left untouched).
     {
         const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
@@ -173,12 +185,24 @@ int main(int argc, char** argv) {
         }
         lsfg::configureEnvironment(lsfgEnabled);
     }
+    const bool hdrOutSetting = !probing && QSettings().value("enh/hdrOut", false).toBool() && qEnvironmentVariable("VEYAMUX_HDR_OUT") != "0";
+    bool hdrOutRequested = hdrOutSetting;
     if (vulkanUi) {
         QQuickWindow::setGraphicsApi(QSGRendererInterface::Vulkan);
         vkInst = std::make_unique<QVulkanInstance>();
         vkInst->setApiVersion(QVersionNumber(1, 3));
+        QByteArrayList exts;
         if (vkInst->supportedExtensions().contains(QByteArrayLiteral("VK_EXT_debug_utils")))
-            vkInst->setExtensions({QByteArrayLiteral("VK_EXT_debug_utils")});   // FidelityFX debug labels
+            exts << QByteArrayLiteral("VK_EXT_debug_utils");   // FidelityFX debug labels
+        // HDR display output (experimental, opt-in): ask Qt Quick for an scRGB (FP16, extended linear sRGB) swapchain.
+        // Needs the colour-space extension; Qt falls back to a normal swapchain if the display/compositor can't do it.
+        if (hdrOutRequested && vkInst->supportedExtensions().contains(QByteArrayLiteral("VK_EXT_swapchain_colorspace"))) {
+            exts << QByteArrayLiteral("VK_EXT_swapchain_colorspace");
+            qputenv("QSG_RHI_HDR", "scrgb");
+        } else {
+            hdrOutRequested = false;
+        }
+        vkInst->setExtensions(exts);
         std::string err;
         if (!vkInst->create()) {
             qWarning("Vulkan UI unavailable (QVulkanInstance); using the software renderer");
@@ -225,7 +249,32 @@ int main(int argc, char** argv) {
         else { qWarning("Zero-copy live path disabled: %s", err.c_str()); live.reset(); }
     }
     player.setWindow(win);
+    player.setHdrOutputState(hdrOutSetting, false);   // until the swapchain test below says otherwise
+    player.setHdrOutputXwayland(QGuiApplication::platformName() == "xcb" && qEnvironmentVariableIsSet("WAYLAND_DISPLAY"));
+    player.setHdrOutputNoVulkan(!vulkanUi);
     win->setVisible(true);
+    if (vulkanUi && hdrOutRequested) {
+        // Same test Qt makes before it creates the swapchain: does the window surface offer FP16 + extended sRGB?
+        QObject::connect(win, &QQuickWindow::frameSwapped, &player, [&player, win, inst = vkInst.get(), ctx = vkCtx.get()] {
+            static bool done = false;
+            if (done) return;
+            done = true;
+            bool ok = false;
+            const VkSurfaceKHR surf = QVulkanInstance::surfaceForWindow(win);
+            auto getFormats = reinterpret_cast<PFN_vkGetPhysicalDeviceSurfaceFormatsKHR>(inst->getInstanceProcAddr("vkGetPhysicalDeviceSurfaceFormatsKHR"));
+            if (surf && getFormats) {
+                uint32_t n = 0;
+                getFormats(ctx->physical(), surf, &n, nullptr);
+                std::vector<VkSurfaceFormatKHR> f(n);
+                if (n) getFormats(ctx->physical(), surf, &n, f.data());
+                for (const auto& sf : f)
+                    ok = ok || (sf.format == VK_FORMAT_R16G16B16A16_SFLOAT && sf.colorSpace == VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT);
+            }
+            if (qEnvironmentVariableIsSet("VEYAMUX_FORCE_HDR_OUT")) ok = true;   // test hook (SDR swapchain, clipped)
+            qInfo("HDR output: %s", ok ? "scRGB swapchain available" : "the display/compositor offers no HDR swapchain; using SDR");
+            QMetaObject::invokeMethod(&player, [&player, ok] { player.setHdrOutputState(true, ok); }, Qt::QueuedConnection);
+        }, Qt::DirectConnection);
+    }
     if (lsfgEnabled) {
         // Running fine for a few seconds with lsfg-vk loaded: clear the crash guard.
         QTimer::singleShot(8000, &app, [] { QSettings q; q.remove("lsfg/launching"); });
@@ -304,6 +353,12 @@ int main(int argc, char** argv) {
             live->submit(std::move(f));
         });
         tick->start();
+    }
+    // Test hook: replay + recording + screenshot round trip (VEYAMUX_TEST_REC=1, with VEYAMUX_TEST_LIVE or a file).
+    if (qEnvironmentVariableIsSet("VEYAMUX_TEST_REC")) {
+        QTimer::singleShot(500, [&] { player.setReplay(true); });
+        QTimer::singleShot(1500, [&] { player.toggleRecording(); });
+        QTimer::singleShot(4500, [&] { player.toggleRecording(); player.saveReplay(); player.screenshot(); });
     }
     if (!capturePath.isEmpty()) QTimer::singleShot(0, [&] { player.openCaptureAuto(capturePath); });
     if (!openFile.isEmpty()) QTimer::singleShot(0, [&] { player.openPath(openFile); });

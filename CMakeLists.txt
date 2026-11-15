@@ -20,7 +20,7 @@ endif()
 get_filename_component(_dxc_bin "${VEYAMUX_DXC}" DIRECTORY)
 get_filename_component(_dxc_root "${_dxc_bin}" DIRECTORY)
 set(ORIG_SHADERS "${CMAKE_CURRENT_SOURCE_DIR}/shaders/veyra")
-file(GLOB ORIG_INCLUDES "${ORIG_SHADERS}/*.hlsli")
+file(GLOB ORIG_INCLUDES "${ORIG_SHADERS}/*.hlsli" "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.hlsli")
 
 set(SPV_DIR "${CMAKE_BINARY_DIR}/shaders")
 set(SPV_OUTPUTS "")
@@ -44,9 +44,11 @@ endforeach()
 foreach(q 3 4 5)
   veyamux_spv(AaFxaa${q} "${ORIG_SHADERS}/AaFxaa.hlsl" -DFXAA_PRESET=${q})
 endforeach()
-foreach(s LxLanczos LxEnhance LxYuv LxLuma LxLkLevel LxMvFill LxDownscale LxMvSelect LxNlm LxTemporalNr LxP010)
+foreach(s LxLanczos LxEnhance LxYuv LxLuma LxLkLevel LxMvFill LxDownscale LxMvSelect LxNlm LxTemporalNr LxP010 LxHdrRgb LxNv12 LxPqOut)
   veyamux_spv(${s} "${CMAKE_CURRENT_SOURCE_DIR}/shaders/${s}.hlsl")
 endforeach()
+# AMD FSR 1 (EASU + RCAS) from the FidelityFX SDK headers
+veyamux_spv(LxFsr1 "${CMAKE_CURRENT_SOURCE_DIR}/shaders/LxFsr1.hlsl" -I "${CMAKE_CURRENT_SOURCE_DIR}/third_party/fidelityfx/include/FidelityFX/gpu")
 add_custom_target(veyamux_shaders ALL DEPENDS ${SPV_OUTPUTS})
 
 
@@ -85,7 +87,7 @@ target_link_libraries(veyamux_ffx PUBLIC Vulkan::Vulkan)
 
 # ---- Core (no Qt): Vulkan context + enhancement chain ----
 find_package(Threads REQUIRED)
-add_library(veyamux_core STATIC src/VkContext.cpp src/EnhanceChain.cpp src/FsrUpscaler.cpp src/MotionEstimator.cpp)
+add_library(veyamux_core STATIC src/VkContext.cpp src/EnhanceChain.cpp src/GpuTimer.cpp src/FsrUpscaler.cpp src/MotionEstimator.cpp)
 target_include_directories(veyamux_core PUBLIC src)
 target_link_libraries(veyamux_core PUBLIC Vulkan::Vulkan veyamux_ffx Threads::Threads)
 target_compile_options(veyamux_core PRIVATE -include "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ffx_linux/ffx_linux_compat.h")
@@ -96,7 +98,7 @@ add_dependencies(veyamux-selftest veyamux_shaders)
 # ---- Media engine (FFmpeg + PulseAudio/PipeWire), still Qt-free ----
 pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavformat libavcodec libavutil libswscale libswresample)
 pkg_check_modules(PULSE REQUIRED IMPORTED_TARGET libpulse-simple)
-add_library(veyamux_media STATIC src/MediaEngine.cpp src/CaptureSource.cpp src/ContentProbe.cpp)
+add_library(veyamux_media STATIC src/MediaEngine.cpp src/CaptureSource.cpp src/ContentProbe.cpp src/Recorder.cpp)
 target_include_directories(veyamux_media PUBLIC src)
 target_link_libraries(veyamux_media PUBLIC veyamux_core PkgConfig::FFMPEG PkgConfig::PULSE Threads::Threads)
 find_package(Threads REQUIRED)
@@ -108,8 +110,21 @@ add_dependencies(veyamux-play-test veyamux_shaders)
 find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Qml Quick Widgets Svg Network)
 qt_standard_project_setup()
 qt_add_executable(veyamux src/main.cpp src/PlayerBridge.cpp src/PlayerBridge.h src/VideoItem.cpp src/VideoItem.h src/LiveVulkan.cpp src/LiveVulkan.h src/LosslessScaling.cpp src/ObsStream.cpp src/LosslessScaling.h)
+# Qt Quick shaders for the HDR display output (Qt Shader Baker: qsb, package qt6-shader-baker)
+find_program(VEYAMUX_QSB qsb PATHS /usr/lib/qt6/bin /usr/lib/qt6/libexec ${QT6_INSTALL_PREFIX}/bin REQUIRED)
+set(QSB_OUT "${CMAKE_BINARY_DIR}/qsb")
+set(QSB_FILES "")
+foreach(f pq_video hdr_window)
+  add_custom_command(OUTPUT "${QSB_OUT}/${f}.frag.qsb"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${QSB_OUT}"
+    COMMAND "${VEYAMUX_QSB}" --glsl "100 es,120,150" -o "${QSB_OUT}/${f}.frag.qsb" "${CMAKE_CURRENT_SOURCE_DIR}/shaders/qt/${f}.frag"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/shaders/qt/${f}.frag" COMMENT "qsb ${f}.frag" VERBATIM)
+  list(APPEND QSB_FILES "${QSB_OUT}/${f}.frag.qsb")
+  set_source_files_properties("${QSB_OUT}/${f}.frag.qsb" PROPERTIES QT_RESOURCE_ALIAS "shaders/${f}.frag.qsb")
+endforeach()
+qt_add_resources(veyamux "hdrshaders" PREFIX "/" FILES ${QSB_FILES})
 qt_add_resources(veyamux "qml" PREFIX "/" FILES
-  qml/Main.qml qml/CaptureDialog.qml qml/FrameGenSection.qml qml/ObsSection.qml qml/IconButton.qml qml/VSlider.qml qml/Segmented.qml qml/ToggleSwitch.qml
+  qml/qmldir qml/Theme.qml qml/Main.qml qml/CaptureDialog.qml qml/FrameGenSection.qml qml/ObsSection.qml qml/RecordSection.qml qml/IconButton.qml qml/VSlider.qml qml/Segmented.qml qml/ToggleSwitch.qml
   qml/icons/capture.svg qml/icons/play.svg qml/icons/pause.svg qml/icons/volume.svg qml/icons/mute.svg qml/icons/fullscreen.svg
   qml/icons/exitfs.svg qml/icons/folder.svg qml/icons/sparkles.svg qml/icons/back10.svg qml/icons/fwd10.svg qml/icons/logo.svg)
 target_link_libraries(veyamux PRIVATE veyamux_media Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Widgets Qt6::Svg Qt6::Network)

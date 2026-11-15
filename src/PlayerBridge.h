@@ -8,6 +8,7 @@
 #include "LosslessScaling.h"
 #include "MediaEngine.h"
 #include "ObsStream.h"
+#include "Recorder.h"
 #include <QImage>
 #include <QMutex>
 #include <QObject>
@@ -28,6 +29,8 @@ class PlayerBridge : public QObject {
     Q_PROPERTY(QString title READ title NOTIFY mediaChanged)
     Q_PROPERTY(QString mediaInfo READ mediaInfo NOTIFY mediaChanged)
     Q_PROPERTY(double volume READ volume WRITE setVolume NOTIFY audioChanged)
+    // Audio offset in ms (positive = sound later); capture can only delay the sound
+    Q_PROPERTY(int audioDelay READ audioDelay WRITE setAudioDelay NOTIFY audioChanged)
     Q_PROPERTY(bool muted READ muted WRITE setMuted NOTIFY audioChanged)
     Q_PROPERTY(QString gpuName READ gpuName NOTIFY statsChanged)
     Q_PROPERTY(QString status READ status NOTIFY statusChanged)
@@ -63,10 +66,29 @@ class PlayerBridge : public QObject {
     // HDR capture (P010): brightest level of the source in nits (tone-mapped to SDR)
     Q_PROPERTY(int hdrPeak READ hdrPeak WRITE setHdrPeak NOTIFY enhanceChanged)
     // VRR mode: the game's own pictures at an even pace (frame generation off); vsync changes need a restart
+    // HDR display output (experimental): requested in the settings (takes effect at the next start) / actually running
+    Q_PROPERTY(bool hdrOutput READ hdrOutput WRITE setHdrOutput NOTIFY enhanceChanged)
+    Q_PROPERTY(bool hdrOutputActive READ hdrOutputActive NOTIFY enhanceChanged)
+    Q_PROPERTY(bool hdrOutputRestart READ hdrOutputRestart NOTIFY enhanceChanged)
+    Q_PROPERTY(int displayPeak READ displayPeak WRITE setDisplayPeak NOTIFY enhanceChanged)
+    Q_PROPERTY(bool hdrOutputXwayland READ hdrOutputXwayland NOTIFY enhanceChanged)
+    Q_PROPERTY(bool hdrOutputNoVulkan READ hdrOutputNoVulkan NOTIFY enhanceChanged)
     Q_PROPERTY(bool vrr READ vrr WRITE setVrr NOTIFY enhanceChanged)
     Q_PROPERTY(bool vrrRestartNeeded READ vrrRestartNeeded NOTIFY enhanceChanged)
     Q_PROPERTY(int denoiseStrength READ denoiseStrength WRITE setDenoiseStrength NOTIFY enhanceChanged)
     Q_PROPERTY(int fxaaQuality READ fxaaQuality WRITE setFxaaQuality NOTIFY enhanceChanged)
+    // Named settings profiles (picture settings + audio delay); a profile can be bound to a capture signal and is then
+    // applied automatically when that signal is opened. Keys 1-9 load profile 1-9.
+    Q_PROPERTY(QStringList profiles READ profiles NOTIFY profilesChanged)
+    Q_PROPERTY(QString notice READ notice NOTIFY noticeChanged)   // short confirmation (profile loaded, clip saved)
+    Q_PROPERTY(QString activeProfile READ activeProfile NOTIFY profilesChanged)
+    Q_PROPERTY(QString signalKey READ signalKey NOTIFY mediaChanged)
+    // Instant replay / recording / screenshots
+    Q_PROPERTY(bool replay READ replay WRITE setReplay NOTIFY recChanged)
+    Q_PROPERTY(int replaySeconds READ replaySeconds WRITE setReplaySeconds NOTIFY recChanged)
+    Q_PROPERTY(int recHeight READ recHeight WRITE setRecHeight NOTIFY recChanged)
+    Q_PROPERTY(bool recording READ recording NOTIFY recChanged)
+    Q_PROPERTY(QString recInfo READ recInfo NOTIFY recTick)
     Q_PROPERTY(double sharpen READ sharpen WRITE setSharpen NOTIFY enhanceChanged)
     Q_PROPERTY(double exposure READ exposure WRITE setExposure NOTIFY enhanceChanged)
     Q_PROPERTY(double contrast READ contrast WRITE setContrast NOTIFY enhanceChanged)
@@ -103,6 +125,22 @@ public:
     // vsync is chosen at start: VRR mode with frame generation off wants it on
     bool vrrRestartNeeded() const { return (s_.vrr && s_.frameGen == veyamux::FrameGenMode::Off) != vrrAtStart_; }
     void setVrrAtStart(bool v) { vrrAtStart_ = v; }
+    bool hdrOutput() const { return hdrOutWanted_; }
+    void setHdrOutput(bool v) { hdrOutWanted_ = v; QSettings().setValue("enh/hdrOut", v); s_.hdrOut = v && hdrOutActive_; applyEnhance(); }
+    bool hdrOutputActive() const { return s_.hdrOut; }
+    bool hdrOutputRestart() const { return hdrOutWanted_ != hdrOutAtStart_; }
+    int displayPeak() const { return int(std::lround(s_.displayPeak)); }
+    void setDisplayPeak(int v) { s_.displayPeak = float(std::clamp(v, 203, 10000)); QSettings().setValue("enh/displayPeak", displayPeak()); applyEnhance(); }
+    // main(): what this run asked Qt for, and whether the window really got an HDR (scRGB) swapchain
+    void setHdrOutputState(bool requested, bool active) {
+        hdrOutAtStart_ = requested; hdrOutActive_ = requested && active; s_.hdrOut = hdrOutWanted_ && hdrOutActive_; applyEnhance();
+    }
+    // HDR output mode: the finished picture is PQ-coded; this turns a copy of it back into normal SDR (OBS, files)
+    QImage sdrCopy(QImage img) const;
+    bool hdrOutputXwayland() const { return hdrOutXwayland_; }
+    bool hdrOutputNoVulkan() const { return hdrOutNoVulkan_; }
+    void setHdrOutputNoVulkan(bool v) { hdrOutNoVulkan_ = v; emit enhanceChanged(); }
+    void setHdrOutputXwayland(bool v) { hdrOutXwayland_ = v; emit enhanceChanged(); }
     void setDenoise(int v) { s_.denoise = veyamux::Denoise(std::clamp(v, 0, 3)); applyEnhance(); }
     int denoiseStrength() const { return s_.denoiseStrength; }
     void setDenoiseStrength(int v) { s_.denoiseStrength = std::clamp(v, 0, 2); applyEnhance(); }
@@ -126,12 +164,24 @@ public:
     void setWindow(QWindow* w) { window_ = w; }
     QString translateMessage(const QString& msg) const;
     int fxaaQuality() const { return s_.fxaaQuality; }
+    QStringList profiles() const;
+    QString notice() const { return notice_; }
+    void showNotice(const QString& s);
+    QString activeProfile() const { return activeProfile_; }
+    QString signalKey() const;   // "1920x1080@60 NV12"-style key of the open capture signal, "" for files
+    Q_INVOKABLE void saveProfile(const QString& name, bool bindToSignal);
+    Q_INVOKABLE bool loadProfile(const QString& name);
+    Q_INVOKABLE void loadProfileIndex(int i) { const auto p = profiles(); if (i >= 0 && i < p.size()) loadProfile(p[i]); }
+    Q_INVOKABLE void deleteProfile(const QString& name);
+    Q_INVOKABLE QString profileSignal(const QString& name) const;
     double sharpen() const { return s_.sharpen; }
     double exposure() const { return s_.exposure; }
     double contrast() const { return s_.contrast; }
     double saturation() const { return s_.saturation; }
 
     void setVolume(double v);
+    int audioDelay() const { return audioDelay_; }
+    void setAudioDelay(int ms) { audioDelay_ = std::clamp(ms, -300, 300); engine_.setAudioDelay(audioDelay_); QSettings().setValue("audio/delayMs", audioDelay_); emit audioChanged(); }
     void setMuted(bool m);
     void setEnhance(bool v);
     void setScale(double v);
@@ -151,6 +201,7 @@ public:
             connect(l, &LiveVulkan::outputChanged, this, &PlayerBridge::frameReady);   // VideoItem re-syncs
             l->setSettings(s_);
             updateObsSource();
+            updateRecordSource();
         }
     }
     bool obsEnabled() const { return obsEnabled_; }
@@ -167,12 +218,26 @@ public:
     // Save settings and release the capture card/audio right away (called on quit, before the exit watchdog starts).
     void shutdown() {
         saveSettings(); QSettings().sync();
-        if (liveVk_) liveVk_->setStream(-1, nullptr);
+        if (liveVk_) { liveVk_->setStream(-1, nullptr); liveVk_->setRecord(-1, nullptr); }
+        if (rec_ && rec_->recording()) rec_->stopRecording();
         obs_.stop();
         engine_.close();
         QSettings().remove("lsfg/launching");   // a normal quit is not a crash, however early
     }
     bool liveVulkanActive() const { return liveVk_ && liveVk_->active(); }
+
+    bool replay() const { return replay_; }
+    void setReplay(bool v);
+    int replaySeconds() const { return replaySeconds_; }
+    void setReplaySeconds(int s);
+    int recHeight() const { return recHeight_; }
+    void setRecHeight(int h);
+    bool recording() const { return rec_ && rec_->recording(); }
+    QString recInfo() const;
+    Q_INVOKABLE void saveReplay();
+    Q_INVOKABLE void toggleRecording();
+    Q_INVOKABLE void screenshot();
+    Q_INVOKABLE void openRecordingsFolder();
 
 public slots:
     QVariantList captureDevices();
@@ -198,6 +263,8 @@ public slots:
     void chooseLsfgFolder();
 
 signals:
+    void noticeChanged();
+    void profilesChanged();
     void mediaChanged();
     void playingChanged();
     void positionChanged();
@@ -209,8 +276,15 @@ signals:
     void ended();
     void lsfgChanged();
     void obsChanged();
+    void recChanged();
+    void recTick();
 
 private:
+    QString delayText(double ms, bool live, QSize size);
+    double delaySum_ = 0, delayShown_ = -1;
+    int delayN_ = 0;
+    QElapsedTimer delayClock_;
+    QString timingText(float gpu, const std::array<float, veyamux::GpuTimer::kStages>& st, double cpuMs, double pipeMs) const;
     void applyEnhance();
     void setStatus(const QString& s);
     void loadSettings();
@@ -237,6 +311,12 @@ private:
     double lastFlow_ = -1;
     QString upError_;
     bool vrrAtStart_ = false;
+    bool hdrOutWanted_ = false, hdrOutAtStart_ = false, hdrOutActive_ = false, hdrOutXwayland_ = false, hdrOutNoVulkan_ = false;
+    int audioDelay_ = 0;
+    QString activeProfile_;
+    QString notice_;
+    int noticeSeq_ = 0;
+    void applySignalProfile();
     // displayed frame rate (with frame generation), measured over ~1 s windows
     double outFps_ = 0;
     QString lastMediaInfo_;
@@ -246,6 +326,13 @@ private:
     QString obsFile_, obsError_;
     int obsStreamH_ = -2;             // what the live path was last told (-1 = off)
     void updateObsSource();
+    std::unique_ptr<veyamux::Recorder> rec_;
+    bool replay_ = false;
+    int replaySeconds_ = 30, recHeight_ = 1080;
+    int recStreamH_ = -2;
+    void updateRecordSource();
+    QString recFolder(bool pictures) const;
+    void onRecMessage(const QString& m, bool error);
     uint64_t fpsCount_ = 0;
     qint64 fpsT0_ = 0;
     QElapsedTimer fpsClock_;

@@ -20,22 +20,22 @@ Column {
         height: col.implicitHeight + 14
         radius: 9
         opacity: usable ? 1 : 0.45
-        color: sel ? "#33ff7a45" : (ma.containsMouse && usable ? "#22ffffff" : "#1d2028")
-        border.color: sel ? "#ff7a45" : "transparent"
+        color: sel ? Theme.accentSoft : (ma.containsMouse && usable ? Theme.border : Theme.surface)
+        border.color: sel ? Theme.accent : "transparent"
         Row {
             x: 10; anchors.verticalCenter: parent.verticalCenter
             spacing: 10
             Rectangle {   // radio dot
                 width: 14; height: 14; radius: 7; anchors.verticalCenter: parent.verticalCenter
-                color: "transparent"; border.color: opt.sel ? "#ff7a45" : "#6c7182"; border.width: 2
-                Rectangle { anchors.centerIn: parent; width: 6; height: 6; radius: 3; color: "#ff7a45"; visible: opt.sel }
+                color: "transparent"; border.color: opt.sel ? Theme.accent : Theme.dim; border.width: 2
+                Rectangle { anchors.centerIn: parent; width: 6; height: 6; radius: 3; color: Theme.accent; visible: opt.sel }
             }
             Column {
                 id: col
                 width: root.width - 44
                 spacing: 2
-                Text { width: parent.width; text: opt.title; color: opt.sel ? "#ffffff" : "#d6d8e0"; font.pixelSize: 13; font.weight: Font.Medium; wrapMode: Text.Wrap }
-                Text { width: parent.width; text: opt.detail; visible: text !== ""; color: "#8b90a0"; font.pixelSize: 11; wrapMode: Text.Wrap }
+                Text { width: parent.width; text: opt.title; color: opt.sel ? Theme.heading : Theme.text; font.pixelSize: 15; font.weight: Font.Medium; wrapMode: Text.Wrap }
+                Text { width: parent.width; text: opt.detail; visible: text !== ""; color: Theme.muted; font.pixelSize: 13; wrapMode: Text.Wrap }
             }
         }
         MouseArea { id: ma; anchors.fill: parent; hoverEnabled: true; enabled: opt.usable; cursorShape: Qt.PointingHandCursor
@@ -54,8 +54,8 @@ Column {
         Column {
             id: stCol
             x: 34; y: 5; width: parent.width - 34 - 52; spacing: 2
-            Text { width: parent.width; text: st.title; color: "#d6d8e0"; font.pixelSize: 12; font.weight: Font.Medium; wrapMode: Text.Wrap }
-            Text { width: parent.width; text: st.detail; visible: text !== ""; color: "#8b90a0"; font.pixelSize: 11; wrapMode: Text.Wrap }
+            Text { width: parent.width; text: st.title; color: Theme.text; font.pixelSize: 14; font.weight: Font.Medium; wrapMode: Text.Wrap }
+            Text { width: parent.width; text: st.detail; visible: text !== ""; color: Theme.muted; font.pixelSize: 13; wrapMode: Text.Wrap }
         }
         ToggleSwitch { anchors.right: parent.right; anchors.rightMargin: 4; y: 6; checked: st.checked; onToggled: (v) => st.toggled(v) }
     }
@@ -64,13 +64,13 @@ Column {
         id: lb
         property string text
         signal clicked()
-        width: lbText.implicitWidth + 22; height: 28; radius: 8
-        color: lbMa.containsMouse ? "#ff8f63" : "#ff7a45"
-        Text { id: lbText; anchors.centerIn: parent; text: lb.text; color: "#14110f"; font.pixelSize: 12; font.weight: Font.DemiBold }
+        width: lbText.implicitWidth + 22; height: 32; radius: 10
+        color: lbMa.containsMouse ? Theme.accentHover : Theme.accent
+        Text { id: lbText; anchors.centerIn: parent; text: lb.text; color: Theme.accentInk; font.pixelSize: 14; font.weight: Font.DemiBold }
         MouseArea { id: lbMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: lb.clicked() }
     }
 
-    Text { text: tr("fg"); color: "#ffffff"; font.pixelSize: 14; font.weight: Font.DemiBold }
+    Text { text: tr("fg"); color: Theme.heading; font.pixelSize: 18; font.weight: Font.Bold; font.letterSpacing: 0.5 }
 
     Option { mode: 0; title: tr("fgOff") }
     SubToggle {
@@ -80,12 +80,12 @@ Column {
     }
     Row {
         visible: player.vrrRestartNeeded
-        x: 34; spacing: 8
-        Text { text: tr("vrrRestart"); color: "#ffb89c"; font.pixelSize: 11; anchors.verticalCenter: parent.verticalCenter; width: root.width - 34 - vrrBtn.width - 12; wrapMode: Text.Wrap }
+        x: 34; spacing: 10
+        Text { text: tr("vrrRestart"); color: Theme.warn; font.pixelSize: 13; anchors.verticalCenter: parent.verticalCenter; width: root.width - 34 - vrrBtn.width - 12; wrapMode: Text.Wrap }
         LinkButton { id: vrrBtn; text: tr("restartNow"); onClicked: player.restartApp() }
     }
 
-    Text { text: "Lossless Scaling"; color: "#9da2b3"; font.pixelSize: 12; font.weight: Font.Medium; topPadding: 4 }
+    Text { text: "Lossless Scaling"; color: Theme.label; font.pixelSize: 14; font.weight: Font.Medium; topPadding: 4 }
     Option { mode: 2; usable: root.lsUsable; title: tr("lsFixed"); detail: tr("lsFixedHint") }
     Option {
         mode: 3; usable: root.lsUsable; title: tr("ls3x")
@@ -103,14 +103,14 @@ Column {
         width: root.width
         height: lsCol.implicitHeight + 16
         radius: 9
-        color: "#15171d"
-        border.color: root.ls === "crashed" || (!root.lsUsable) ? "#44ff7a45" : "#22ffffff"
+        color: Theme.surfaceDeep
+        border.color: root.ls === "crashed" || (!root.lsUsable) ? Theme.accentLine : Theme.border
         Column {
             id: lsCol
             x: 10; y: 8; width: parent.width - 20; spacing: 8
             Text {
-                width: parent.width; wrapMode: Text.Wrap; font.pixelSize: 11
-                color: root.ls === "active" ? "#9be39b" : (root.lsUsable ? "#c9ccd6" : "#ffb89c")
+                width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 13
+                color: root.ls === "active" ? Theme.ok : (root.lsUsable ? Theme.text : Theme.warn)
                 text: {
                     switch (root.ls) {
                     case "active": return tr("lsActive").replace("%1", player.lsfgFolder)
@@ -126,10 +126,10 @@ Column {
                 }
             }
             Text {
-                width: parent.width; wrapMode: Text.WrapAnywhere; font.pixelSize: 11
+                width: parent.width; wrapMode: Text.WrapAnywhere; font.pixelSize: 13
                 visible: player.lsfgLog !== ""
                 color: player.lsfgLog.indexOf("[ERROR]") >= 0 || player.lsfgLog.indexOf("[WARNING]") >= 0
-                       || player.lsfgLog.indexOf("lsfg-vk-cli") >= 0 ? "#ffb89c" : "#9da2b3"
+                       || player.lsfgLog.indexOf("lsfg-vk-cli") >= 0 ? Theme.warn : Theme.label
                 text: player.lsfgLog
             }
             Row {

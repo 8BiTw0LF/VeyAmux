@@ -4,7 +4,7 @@ import QtQuick
 Column {
     id: root
     property var tr: function (k) { return k }
-    spacing: 8
+    spacing: 10
 
     readonly property var heights: [720, 1080, 1440, 0]
 
@@ -13,27 +13,27 @@ Column {
         property string text
         property bool primary: true
         signal clicked()
-        width: lbText.implicitWidth + 22; height: 28; radius: 8
-        color: primary ? (lbMa.containsMouse ? "#ff8f63" : "#ff7a45") : (lbMa.containsMouse ? "#2b2e38" : "#1d2028")
-        Text { id: lbText; anchors.centerIn: parent; text: lb.text; color: lb.primary ? "#14110f" : "#d6d8e0"; font.pixelSize: 12; font.weight: Font.DemiBold }
+        width: lbText.implicitWidth + 22; height: 32; radius: 10
+        color: lbMa.containsMouse ? Theme.surfaceHover : Theme.surface; gradient: primary ? (lbMa.containsMouse ? Theme.sunsetHover : Theme.sunset) : null
+        Text { id: lbText; anchors.centerIn: parent; text: lb.text; color: lb.primary ? Theme.accentInk : Theme.text; font.pixelSize: 14; font.weight: Font.DemiBold }
         MouseArea { id: lbMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: lb.clicked() }
     }
 
     Item {
-        width: root.width; height: 24
-        Text { text: tr("obs"); color: "#ffffff"; font.pixelSize: 14; font.weight: Font.DemiBold; anchors.verticalCenter: parent.verticalCenter }
+        width: root.width; height: 28
+        Text { text: tr("obs"); color: Theme.heading; font.pixelSize: 18; font.weight: Font.Bold; font.letterSpacing: 0.5; anchors.verticalCenter: parent.verticalCenter }
         ToggleSwitch { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
             checked: player.obsEnabled; onToggled: (v) => player.obsEnabled = v }
     }
     Text {
-        width: root.width; wrapMode: Text.Wrap; font.pixelSize: 11
-        color: player.obsError !== "" ? "#ffb89c" : (player.obsViewers > 0 ? "#9be39b" : "#8b90a0")
+        width: root.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 13
+        color: player.obsError !== "" ? Theme.warn : (player.obsViewers > 0 ? Theme.ok : Theme.muted)
         text: player.obsError !== "" ? player.obsError
               : !player.obsEnabled ? tr("obsOff")
               : player.obsViewers > 0 ? tr("obsLive").replace("%1", player.obsViewers)
               : tr("obsWaiting").replace("%1", player.obsUrl)
     }
-    Text { text: tr("obsRes"); color: "#9da2b3"; font.pixelSize: 12 }
+    Text { text: tr("obsRes"); color: Theme.label; font.pixelSize: 14 }
     Segmented {
         width: root.width
         model: ["720p", "1080p", "1440p", tr("native")]
@@ -46,9 +46,9 @@ Column {
         LinkButton { text: tr("obsCopy"); primary: false; onClicked: player.copyObsUrl() }
     }
     Text {
-        width: root.width; wrapMode: Text.Wrap; font.pixelSize: 11; color: "#c9ccd6"
+        width: root.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 13; color: Theme.text
         visible: player.obsFile !== ""
         text: tr("obsSaved").replace("%1", player.obsFile)
     }
-    Text { width: root.width; wrapMode: Text.Wrap; font.pixelSize: 11; color: "#8b90a0"; text: tr("obsHelp") }
+    Text { width: root.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 13; color: Theme.muted; text: tr("obsHelp") }
 }

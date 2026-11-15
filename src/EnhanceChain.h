@@ -1,10 +1,13 @@
 // VeyAmux for Linux - GPU enhancement chain built from the original Veyra (Windows) HLSL shaders (compiled to SPIR-V).
 //   RGBA8 -> RgbToLinear -> [AaLuma+AaFxaa] -> [Lanczos or AMD FSR 3.1 upscale] -> [Sharpen/Grade] -> ScaleBlit(sRGB encode) -> RGBA8
 #pragma once
+#include <chrono>
 #include <atomic>
 #include <mutex>
 #include "FsrUpscaler.h"
 #include "MotionEstimator.h"
+#include "GpuTimer.h"
+#include <array>
 #include "VkContext.h"
 #include <map>
 #include <string>
@@ -19,7 +22,7 @@ enum class FrameGenMode { Off = 0, LsfgFixed = 2, LsfgFixed3 = 3 };   // Lossles
 // Denoisers (run first, on the source-size linear image, before FXAA/upscaling/sharpening).
 enum class Denoise { Off = 0, Spatial = 1, Temporal = 2, Both = 3 };
 // Upscaling method used when scale > 1. AmdFsr3 falls back to Lanczos if FidelityFX cannot run.
-enum class Upscaler { Lanczos = 0, AmdFsr3 = 1 };
+enum class Upscaler { Lanczos = 0, AmdFsr3 = 1, AmdFsr1 = 2 };   // FSR 1 = EASU + RCAS (spatial, one frame)
 
 struct EnhanceSettings {
     bool enabled = true;
@@ -29,6 +32,8 @@ struct EnhanceSettings {
     Denoise denoise = Denoise::Off;
     int denoiseStrength = 1;  // 0 light, 1 medium, 2 strong
     float hdrPeak = 1000.0f;  // HDR capture (P010): brightest level of the source in nits, tone-mapped to SDR white
+    bool hdrOut = false;      // HDR display output (scRGB swapchain): out8_ holds PQ-coded light instead of sRGB
+    float displayPeak = 1000.0f;   // HDR output: brightest level of the display in nits (HDR sources are mapped to it)
     bool vrr = false;         // live: show the game's own pictures at an even pace (for VRR displays; frame generation off)
     int fxaaQuality = 1;      // 0 medium, 1 high, 2 ultra (VeyAmux AaFxaa3/4/5)
     float sharpen = 0.0f;     // 0..1
@@ -48,6 +53,7 @@ struct EnhanceSettings {
 // A raw frame handed to the zero-copy live path (everything after the upload happens on the GPU).
 struct LiveInput {
     enum Format { RGBA, YUYV, UYVY, NV12, P010 } fmt = RGBA;   // P010: HDR (PQ, BT.2020), tone-mapped to SDR
+    std::chrono::steady_clock::time_point time{};               // capture time (recording timestamps)
     const uint8_t* data = nullptr;
     size_t size = 0;
     int w = 0, h = 0, stride = 0;     // stride in bytes (Y-plane stride for NV12)
@@ -63,12 +69,16 @@ public:
     // Runs the chain on a tightly- or loosely-packed RGBA8 frame. Output is tightly packed RGBA8.
     // frameMs: time since the previous source frame (for the temporal passes).
     bool process(const uint8_t* rgba, int w, int h, int strideBytes, const EnhanceSettings& s,
-                 std::vector<uint8_t>& out, int& outW, int& outH, std::string& error, float frameMs = 1000.0f / 30.0f);
+                 std::vector<uint8_t>& out, int& outW, int& outH, std::string& error, float frameMs = 1000.0f / 30.0f,
+                 int hdr = 0);   // hdr: 0 RGBA8; 1 PQ / 2 HLG = RGBA64 (16-bit R'G'B', BT.2020), tone-mapped to SDR
     // Zero-copy live path: records upload + conversion + enhancement into a command buffer that belongs to the
     // caller (Qt's frame). No submit, no fence, no readback: the result is liveOutput(), an RGBA8 GENERAL image.
     bool recordLive(VkCommandBuffer cb, int slot, const LiveInput& in, const EnhanceSettings& s, std::string& error,
                     float frameMs = 1000.0f / 60.0f);
     const ImageRes& liveOutput() const { return out8_; }
+    // Measured GPU time (Vulkan timestamps), smoothed: total and per stage; -1 when not available.
+    float gpuMs() const { return timer_.totalMs(); }
+    std::array<float, GpuTimer::kStages> gpuStageMs() const { return timer_.stageMs(); }
     std::string upError() const { return upError_; }
     FsrUpscaler* upscaler() { return fsrUp_.get(); }   // test hook
     uint64_t liveGeneration() const { return liveGen_; }
@@ -82,6 +92,15 @@ public:
     void setStreamMaxHeight(int h) { streamMaxH_ = h; }
     void pollStream(std::vector<StreamFrame>& out);
 
+    // Recording (live path): when maxHeight >= 0 every displayed image is converted to NV12 at that height
+    // (0 = original size) and copied to host memory, like the OBS stream. pollRecord() returns the finished copies.
+    struct RecFrame { std::vector<uint8_t> nv12; int w = 0, h = 0; std::chrono::steady_clock::time_point t{}; };
+    void setRecordMaxHeight(int h) { recMaxH_ = h; }
+    void pollRecord(std::vector<RecFrame>& out);
+    // Screenshot (live path): the next displayed image is copied at full size; pollScreenshot() returns it once.
+    void requestScreenshot() { shotWanted_ = true; }
+    bool pollScreenshot(StreamFrame& out);
+
 private:
     struct StreamSlot {
         ImageRes img; BufferRes buf; VkEvent ev = VK_NULL_HANDLE;
@@ -94,9 +113,28 @@ private:
     uint64_t streamSeq_ = 0;
     void recordStream(VkCommandBuffer cb, const ImageRes& src, int delayMs);
     void releaseStream();
+    struct RecSlot {
+        ImageRes y, uv; BufferRes buf; VkEvent ev = VK_NULL_HANDLE;
+        bool pending = false; uint64_t seq = 0; std::chrono::steady_clock::time_point t{};
+    };
+    static constexpr int kRecSlots = 6;
+    RecSlot rec_[kRecSlots];
+    std::atomic<int> recMaxH_{-1};
+    uint64_t recSeq_ = 0;
+    void recordRec(VkCommandBuffer cb, const ImageRes& src, std::chrono::steady_clock::time_point t);
+    StreamSlot shot_;
+    std::atomic<bool> shotWanted_{false};
+    void recordShot(VkCommandBuffer cb, const ImageRes& src);
     void run(const char* k, std::initializer_list<const ImageRes*> in, std::initializer_list<const ImageRes*> outs,
              const void* ubo, uint32_t uboSize, int dw, int dh, int g);
     void recordPost(const ImageRes* start, const EnhanceSettings& s);
+    // HDR sources: the level the source is tone-mapped to (1.0 in the working image): SDR white, or the display's peak
+    static float hdrTarget(const EnhanceSettings& s) {
+        return s.hdrOut ? std::clamp(std::min(s.displayPeak, s.hdrPeak), 203.0f, 10000.0f) : 203.0f;
+    }
+    float frameNits_ = 203.0f;
+    std::atomic<bool> outPq_{false};
+    uint32_t pqFrame_ = 0;
     void retire(ImageRes& img);
     void collectRetired();
     bool ensureLive(int w, int h, int ow, int oh, std::string& error);
@@ -114,6 +152,7 @@ private:
     std::unique_ptr<FsrUpscaler> fsrUp_;
     // denoisers
     std::unique_ptr<MotionEstimator> nrMotion_;
+    GpuTimer timer_;
     ImageRes nrOut_, nrHist_[2];
     int nrCur_ = 0;
     bool nrHistory_ = false;          // the temporal denoiser has a previous result of this sequence
@@ -124,7 +163,8 @@ private:
     float frameMs_ = 1000.0f / 30.0f; // time since the previous source frame (for the temporal passes)
     BufferRes staging_, readback_;
     // live path
-    ImageRes rawPacked_, rawY_, rawUV_, rawY16_, rawUV16_;   // the 16-bit planes only exist for P010 (HDR)
+    ImageRes rawPacked_, rawY_, rawUV_, rawY16_, rawUV16_, src16_;   // src16_: HDR video (RGBA64)
+    BufferRes staging16_;   // the 16-bit planes only exist for P010 (HDR)
     BufferRes liveStaging_[VkContext::kSlots];
     VkDeviceSize liveStagingSize_ = 0;
     int liveW_ = 0, liveH_ = 0;

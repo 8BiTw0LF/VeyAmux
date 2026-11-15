@@ -35,6 +35,8 @@ EnhanceChain::EnhanceChain(VkContext& ctx, std::string shaderDir)
 
 EnhanceChain::~EnhanceChain() {
     liveMode_ = false;
+    if (ctx_.device()) vkDeviceWaitIdle(ctx_.device());
+    timer_.destroy();
     releaseStream();
     fsrUp_.reset();
     nrMotion_.reset();
@@ -60,8 +62,9 @@ bool EnhanceChain::loadKernel(const std::string& name, std::string& error) {
 }
 
 bool EnhanceChain::init(std::string& error) {
-    for (const char* n : {"RgbToLinear", "AaLuma", "AaFxaa3", "AaFxaa4", "AaFxaa5", "LxLanczos", "LxEnhance", "ScaleBlit", "LxYuv", "LxDownscale", "LxNlm", "LxTemporalNr", "LxP010"})
+    for (const char* n : {"RgbToLinear", "AaLuma", "AaFxaa3", "AaFxaa4", "AaFxaa5", "LxLanczos", "LxEnhance", "ScaleBlit", "LxYuv", "LxDownscale", "LxNlm", "LxTemporalNr", "LxP010", "LxFsr1", "LxHdrRgb", "LxNv12", "LxPqOut"})
         if (!loadKernel(n, error)) return false;
+    timer_.init(ctx_.physical(), ctx_.device(), ctx_.queueFamily());   // optional: no timestamps = no GPU time shown
     return true;
 }
 
@@ -77,12 +80,13 @@ void EnhanceChain::outputSize(int w, int h, const EnhanceSettings& s, int& ow, i
 }
 
 void EnhanceChain::releaseResources() {
-    for (ImageRes* i : {&src_, &lin_, &linB_, &luma_, &up_, &fin_, &rawPacked_, &rawY_, &rawUV_, &rawY16_, &rawUV16_, &nrOut_, &nrHist_[0], &nrHist_[1]}) ctx_.destroy(*i);
+    for (ImageRes* i : {&src_, &lin_, &linB_, &luma_, &up_, &fin_, &rawPacked_, &rawY_, &rawUV_, &rawY16_, &rawUV16_, &src16_, &nrOut_, &nrHist_[0], &nrHist_[1]}) ctx_.destroy(*i);
     nrHistory_ = false;
     if (liveMode_) retire(out8_); else ctx_.destroy(out8_);
     for (auto& b : liveStaging_) ctx_.destroy(b);
     liveStagingSize_ = 0;
     ctx_.destroy(staging_);
+    ctx_.destroy(staging16_);
     ctx_.destroy(readback_);
     w_ = h_ = ow_ = oh_ = 0;
 }
@@ -115,28 +119,48 @@ bool EnhanceChain::ensureResources(int w, int h, int ow, int oh, std::string& er
 
 bool EnhanceChain::process(const uint8_t* rgba, int w, int h, int stride, const EnhanceSettings& s,
                            std::vector<uint8_t>& out, int& outW, int& outH, std::string& error,
-                           float frameMs) {
+                           float frameMs, int hdr) {
     int ow, oh;
     outputSize(w, h, s, ow, oh);
     if (!ensureResources(w, h, ow, oh, error)) return false;
     outW = ow; outH = oh;
     frameMs_ = frameMs;
+    if (hdr && (!src16_.image || int(src16_.width) != w || int(src16_.height) != h)) {   // HDR video: 16-bit input
+        if (src16_.image) { vkDeviceWaitIdle(ctx_.device()); ctx_.destroy(src16_); ctx_.destroy(staging16_); }
+        src16_ = ctx_.createImage(uint32_t(w), uint32_t(h), VK_FORMAT_R16G16B16A16_UNORM,
+                                  VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+        staging16_ = ctx_.createBuffer(VkDeviceSize(w) * h * 8, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, false);
+        if (!src16_.image || !staging16_.mapped) { error = "Out of GPU memory for HDR video"; return false; }
+    }
 
     // Upload (row by row so any source stride works).
-    for (int y = 0; y < h; ++y)
-        std::memcpy(static_cast<uint8_t*>(staging_.mapped) + size_t(y) * w * 4, rgba + size_t(y) * stride, size_t(w) * 4);
+    const size_t rowBytes = size_t(w) * (hdr ? 8 : 4);
+    uint8_t* stage = static_cast<uint8_t*>(hdr ? staging16_.mapped : staging_.mapped);
+    for (int y = 0; y < h; ++y) std::memcpy(stage + size_t(y) * rowBytes, rgba + size_t(y) * stride, rowBytes);
 
     ctx_.beginFrame();
     VkCommandBuffer cmd = ctx_.cmd();
+    timer_.begin(cmd, 0);
     VkBufferImageCopy up{};
     up.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
     up.imageExtent = {uint32_t(w), uint32_t(h), 1};
-    vkCmdCopyBufferToImage(cmd, staging_.buffer, src_.image, VK_IMAGE_LAYOUT_GENERAL, 1, &up);
+    vkCmdCopyBufferToImage(cmd, hdr ? staging16_.buffer : staging_.buffer, hdr ? src16_.image : src_.image,
+                           VK_IMAGE_LAYOUT_GENERAL, 1, &up);
     ctx_.computeBarrier();
 
-    RgbParams rp{};
-    rp.width = w; rp.height = h; rp.transfer = 1; rp.limited = 0;   // sws already produced full-range sRGB-coded RGB
-    run("RgbToLinear", {&src_}, {&lin_}, &rp, sizeof rp, w, h, 16);
+    if (hdr) {
+        const float white = hdrTarget(s);
+        frameNits_ = white;
+        struct { uint32_t w, h, mode, p0; float peak, white, p1, p2; } hp{uint32_t(w), uint32_t(h), uint32_t(hdr), 0,
+                                                                         std::clamp(s.hdrPeak, 203.0f, 10000.0f), white, 0, 0};
+        run("LxHdrRgb", {&src16_}, {&lin_}, &hp, sizeof hp, w, h, 16);
+    } else {
+        frameNits_ = 203.0f;
+        RgbParams rp{};
+        rp.width = w; rp.height = h; rp.transfer = 1; rp.limited = 0;   // sws already produced full-range sRGB-coded RGB
+        run("RgbToLinear", {&src_}, {&lin_}, &rp, sizeof rp, w, h, 16);
+    }
+    timer_.mark(cmd, GpuTimer::Input);
 
     auto post = [&](const ImageRes* start, BufferRes& dstBuf) {
         recordPost(start, s);
@@ -145,6 +169,7 @@ bool EnhanceChain::process(const uint8_t* rgba, int w, int h, int stride, const 
         rb.imageExtent = {uint32_t(ow), uint32_t(oh), 1};
         vkCmdCopyImageToBuffer(cmd, out8_.image, VK_IMAGE_LAYOUT_GENERAL, dstBuf.buffer, 1, &rb);
         ctx_.computeBarrier();
+        timer_.mark(cmd, GpuTimer::Output);
     };
     post(&lin_, readback_);
 
@@ -154,6 +179,7 @@ bool EnhanceChain::process(const uint8_t* rgba, int w, int h, int stride, const 
     vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0, 1, &hb, 0, nullptr, 0, nullptr);
 
     if (!ctx_.submitAndWait(error)) return false;
+    timer_.collectNow(0);
     out.resize(size_t(ow) * oh * 4);
     std::memcpy(out.data(), readback_.mapped, out.size());
     return true;
@@ -174,7 +200,7 @@ void EnhanceChain::run(const char* k, std::initializer_list<const ImageRes*> in,
 void EnhanceChain::recordPost(const ImageRes* start, const EnhanceSettings& s) {
     const int w = w_, h = h_, ow = ow_, oh = oh_;
     const ImageRes* cur = start;
-    if (s.enabled && s.denoise != Denoise::Off) cur = recordDenoise(cur, s);
+    if (s.enabled && s.denoise != Denoise::Off) { cur = recordDenoise(cur, s); timer_.mark(ctx_.active(), GpuTimer::Denoise); }
     else nrHistory_ = false;
     if (s.enabled && s.fxaa) {
         AaParams ap{};
@@ -184,6 +210,7 @@ void EnhanceChain::recordPost(const ImageRes* start, const EnhanceSettings& s) {
         const char* fx = s.fxaaQuality <= 0 ? "AaFxaa3" : (s.fxaaQuality == 1 ? "AaFxaa4" : "AaFxaa5");
         run(fx, {cur, &luma_}, {&linB_}, &ap, sizeof ap, w, h, 8);
         cur = &linB_;
+        timer_.mark(ctx_.active(), GpuTimer::AntiAlias);
     }
     if (s.enabled && (ow != w || oh != h)) {
         bool done = false;
@@ -201,11 +228,24 @@ void EnhanceChain::recordPost(const ImageRes* start, const EnhanceSettings& s) {
             upError_.clear();
             upFailedKey_ = 0;
         }
+        if (!done && s.upscaler == Upscaler::AmdFsr1) {
+            // AMD FSR 1: EASU into fin_ (free until the finishing pass), RCAS back into up_
+            struct { uint32_t iw, ih, ow, oh, mode; float sharp; uint32_t p0, p1; } fp{uint32_t(w), uint32_t(h), uint32_t(ow), uint32_t(oh), 0, 0, 0, 0};
+            static const bool noRcas = std::getenv("VEYAMUX_FSR1_NORCAS") != nullptr;   // test hook
+            run("LxFsr1", {cur}, {noRcas ? &up_ : &fin_}, &fp, sizeof fp, ow, oh, 16);
+            if (noRcas) { cur = &up_; }
+            // RCAS strength in stops below its maximum (AMD suggests 0.2 - 0.5); VEYAMUX_FSR1_RCAS overrides (tests)
+            static const float rcasStops = std::getenv("VEYAMUX_FSR1_RCAS") ? float(std::atof(std::getenv("VEYAMUX_FSR1_RCAS"))) : 0.5f;
+            fp.mode = 1; fp.sharp = rcasStops;
+            if (!noRcas) run("LxFsr1", {&fin_}, {&up_}, &fp, sizeof fp, ow, oh, 16);
+            done = true;
+        }
         if (!done) {
             LanczosParams lp{uint32_t(w), uint32_t(h), uint32_t(ow), uint32_t(oh)};
             run("LxLanczos", {cur}, {&up_}, &lp, sizeof lp, ow, oh, 16);
         }
         cur = &up_;
+        timer_.mark(ctx_.active(), GpuTimer::Upscale);
     } else {
         upHistory_ = false;
     }
@@ -214,8 +254,15 @@ void EnhanceChain::recordPost(const ImageRes* start, const EnhanceSettings& s) {
         run("LxEnhance", {cur}, {&fin_}, &ep, sizeof ep, ow, oh, 16);
         cur = &fin_;
     }
-    ScaleParams sp{uint32_t(ow), uint32_t(oh), uint32_t(ow), uint32_t(oh), 1.0f, 0.0f, 0, 0};
-    run("ScaleBlit", {cur}, {&out8_}, &sp, sizeof sp, ow, oh, 16);
+    outPq_ = s.hdrOut;
+    if (s.hdrOut) {   // HDR display: PQ-coded light (1.0 in the working image = frameNits_ nits)
+        struct { uint32_t w, h; float nits; uint32_t frame; } pp{uint32_t(ow), uint32_t(oh), frameNits_, uint32_t(++pqFrame_)};
+        run("LxPqOut", {cur}, {&out8_}, &pp, sizeof pp, ow, oh, 16);
+    } else {
+        ScaleParams sp{uint32_t(ow), uint32_t(oh), uint32_t(ow), uint32_t(oh), 1.0f, 0.0f, 0, 0};
+        run("ScaleBlit", {cur}, {&out8_}, &sp, sizeof sp, ow, oh, 16);
+    }
+    timer_.mark(ctx_.active(), GpuTimer::Finish);
 }
 
 // Noise levels (perceptual units, sqrt of linear light) for light / medium / strong.
@@ -314,6 +361,7 @@ bool EnhanceChain::recordLive(VkCommandBuffer cb, int slot, const LiveInput& in,
     std::memcpy(liveStaging_[sl].mapped, in.data, bytes);
 
     ctx_.beginExternal(cb, sl);
+    timer_.begin(cb, sl);
     // Previous frames may still be reading our images (Qt's fragment pass) or the staging buffer: wait for them.
     {
         VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
@@ -360,8 +408,10 @@ bool EnhanceChain::recordLive(VkCommandBuffer cb, int slot, const LiveInput& in,
     ctx_.computeBarrier();
     if (in.fmt == LiveInput::P010) {
         // HDR: PQ/BT.2020 -> tone-mapped linear SDR straight into the working image (keeps all 10 bits)
+        const float white = hdrTarget(s);
+        frameNits_ = white;
         struct { uint32_t w, h, full, p0; float peak, white, p1, p2; } hp{W, H, in.fullRange ? 1u : 0u, 0,
-                                                                         std::clamp(s.hdrPeak, 203.0f, 10000.0f), 203.0f, 0, 0};
+                                                                         std::clamp(s.hdrPeak, 203.0f, 10000.0f), white, 0, 0};
         run("LxP010", {&rawY16_, &rawUV16_}, {&lin_}, &hp, sizeof hp, in.w, in.h, 16);
     } else if (in.fmt != LiveInput::RGBA) {
         struct { uint32_t w, h, mode, full, bt709, p0, p1, p2; } yp{W, H, in.fmt == LiveInput::YUYV ? 0u : (in.fmt == LiveInput::UYVY ? 1u : 2u),
@@ -369,13 +419,17 @@ bool EnhanceChain::recordLive(VkCommandBuffer cb, int slot, const LiveInput& in,
         run("LxYuv", {&rawPacked_, &rawY_, &rawUV_}, {&src_}, &yp, sizeof yp, in.w, in.h, 16);
     }
     if (in.fmt != LiveInput::P010) {
+        frameNits_ = 203.0f;
         RgbParams rp{};
         rp.width = W; rp.height = H; rp.transfer = 1; rp.limited = 0;
         run("RgbToLinear", {&src_}, {&lin_}, &rp, sizeof rp, in.w, in.h, 16);
     }
+    timer_.mark(cb, GpuTimer::Input);
     recordPost(&lin_, s);
     // OBS stream copy of the displayed image
-    if (streamMaxH_.load() >= 0) recordStream(cb, out8_, 0);
+    if (streamMaxH_.load() >= 0) { recordStream(cb, out8_, 0); timer_.mark(cb, GpuTimer::Output); }
+    if (recMaxH_.load() >= 0) recordRec(cb, out8_, in.time);
+    if (shotWanted_.exchange(false)) recordShot(cb, out8_);
 
     // Hand the display image to Qt's fragment shader in SHADER_READ_ONLY_OPTIMAL - the layout the QSGTexture
     // wrapper is created with (VideoItem), so Qt's own layout tracking matches reality.
@@ -416,7 +470,7 @@ void EnhanceChain::recordStream(VkCommandBuffer cb, const ImageRes& src, int del
         VkEventCreateInfo ei{VK_STRUCTURE_TYPE_EVENT_CREATE_INFO};
         if (vkCreateEvent(ctx_.device(), &ei, nullptr, &slot->ev) != VK_SUCCESS) return;
     }
-    struct { uint32_t sw, sh, dw, dh; } dp{src.width, src.height, uint32_t(tw), uint32_t(th)};
+    struct { uint32_t sw, sh, dw, dh, pq, p0, p1, p2; } dp{src.width, src.height, uint32_t(tw), uint32_t(th), outPq_ ? 1u : 0u, 0, 0, 0};
     run("LxDownscale", {&src}, {&slot->img}, &dp, sizeof dp, tw, th, 16);
     ctx_.computeBarrier();
     VkBufferImageCopy c{};
@@ -454,12 +508,129 @@ void EnhanceChain::pollStream(std::vector<StreamFrame>& out) {
     }
 }
 
+
+// ------------------------------------------------------------------ recording / screenshot readback
+
+void EnhanceChain::recordRec(VkCommandBuffer cb, const ImageRes& src, std::chrono::steady_clock::time_point t) {
+    if (!src.image || src.width == 0) return;
+    const int mh = recMaxH_.load();
+    int tw = int(src.width), th = int(src.height);
+    if (mh > 0 && th > mh) { tw = int(std::lround(double(tw) * mh / th)); th = mh; }
+    tw = std::max(2, tw & ~1); th = std::max(2, th & ~1);
+    std::lock_guard l(streamM_);
+    RecSlot* slot = nullptr;
+    for (auto& sl : rec_) if (!sl.pending) { slot = &sl; break; }
+    if (!slot) return;   // the encoder is behind: this frame is dropped from the recording only
+    if (slot->y.width != uint32_t(tw) || slot->y.height != uint32_t(th)) {
+        ctx_.destroy(slot->y); ctx_.destroy(slot->uv); ctx_.destroy(slot->buf);
+        const VkImageUsageFlags u = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+        slot->y = ctx_.createImage(uint32_t(tw), uint32_t(th), VK_FORMAT_R8_UNORM, u);
+        slot->uv = ctx_.createImage(uint32_t(tw / 2), uint32_t(th / 2), VK_FORMAT_R8G8_UNORM, u);
+        slot->buf = ctx_.createBuffer(VkDeviceSize(tw) * th * 3 / 2, VK_BUFFER_USAGE_TRANSFER_DST_BIT, true);
+        if (!slot->y.image || !slot->uv.image || !slot->buf.buffer) {
+            ctx_.destroy(slot->y); ctx_.destroy(slot->uv); ctx_.destroy(slot->buf); return;
+        }
+    }
+    if (!slot->ev) {
+        VkEventCreateInfo ei{VK_STRUCTURE_TYPE_EVENT_CREATE_INFO};
+        if (vkCreateEvent(ctx_.device(), &ei, nullptr, &slot->ev) != VK_SUCCESS) return;
+    }
+    struct { uint32_t sw, sh, dw, dh, pq, p0, p1, p2; } np{src.width, src.height, uint32_t(tw), uint32_t(th), outPq_ ? 1u : 0u, 0, 0, 0};
+    run("LxNv12", {&src}, {&slot->y, &slot->uv}, &np, sizeof np, tw / 2, th / 2, 8);
+    VkBufferImageCopy c[2]{};
+    c[0].imageSubresource = c[1].imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+    c[0].imageExtent = {uint32_t(tw), uint32_t(th), 1};
+    vkCmdCopyImageToBuffer(cb, slot->y.image, VK_IMAGE_LAYOUT_GENERAL, slot->buf.buffer, 1, &c[0]);
+    c[1].bufferOffset = VkDeviceSize(tw) * th;
+    c[1].imageExtent = {uint32_t(tw / 2), uint32_t(th / 2), 1};
+    vkCmdCopyImageToBuffer(cb, slot->uv.image, VK_IMAGE_LAYOUT_GENERAL, slot->buf.buffer, 1, &c[1]);
+    VkMemoryBarrier hb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+    hb.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    hb.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
+    vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0, 1, &hb, 0, nullptr, 0, nullptr);
+    vkCmdSetEvent(cb, slot->ev, VK_PIPELINE_STAGE_TRANSFER_BIT);
+    slot->pending = true;
+    slot->seq = ++recSeq_;
+    slot->t = t.time_since_epoch().count() ? t : std::chrono::steady_clock::now();
+}
+
+void EnhanceChain::pollRecord(std::vector<RecFrame>& out) {
+    std::lock_guard l(streamM_);
+    for (;;) {
+        RecSlot* oldest = nullptr;
+        for (auto& sl : rec_)
+            if (sl.pending && (!oldest || sl.seq < oldest->seq)) oldest = &sl;
+        if (!oldest || vkGetEventStatus(ctx_.device(), oldest->ev) != VK_EVENT_SET) return;
+        VkMappedMemoryRange r{VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE};
+        r.memory = oldest->buf.memory;
+        r.size = VK_WHOLE_SIZE;
+        vkInvalidateMappedMemoryRanges(ctx_.device(), 1, &r);
+        RecFrame f;
+        f.w = int(oldest->y.width); f.h = int(oldest->y.height); f.t = oldest->t;
+        const auto* p = static_cast<const uint8_t*>(oldest->buf.mapped);
+        f.nv12.assign(p, p + size_t(f.w) * f.h * 3 / 2);
+        vkResetEvent(ctx_.device(), oldest->ev);
+        oldest->pending = false;
+        out.push_back(std::move(f));
+    }
+}
+
+void EnhanceChain::recordShot(VkCommandBuffer cb, const ImageRes& src) {
+    if (!src.image || src.width == 0) return;
+    std::lock_guard l(streamM_);
+    if (shot_.pending) return;
+    if (shot_.buf.size < VkDeviceSize(src.width) * src.height * 4 || shot_.img.width != src.width || shot_.img.height != src.height) {
+        ctx_.destroy(shot_.buf);
+        shot_.buf = ctx_.createBuffer(VkDeviceSize(src.width) * src.height * 4, VK_BUFFER_USAGE_TRANSFER_DST_BIT, true);
+        if (!shot_.buf.buffer) return;
+        shot_.img.width = src.width; shot_.img.height = src.height;   // size bookkeeping only (no image owned)
+    }
+    if (!shot_.ev) {
+        VkEventCreateInfo ei{VK_STRUCTURE_TYPE_EVENT_CREATE_INFO};
+        if (vkCreateEvent(ctx_.device(), &ei, nullptr, &shot_.ev) != VK_SUCCESS) return;
+    }
+    VkBufferImageCopy c{};
+    c.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+    c.imageExtent = {src.width, src.height, 1};
+    vkCmdCopyImageToBuffer(cb, src.image, VK_IMAGE_LAYOUT_GENERAL, shot_.buf.buffer, 1, &c);
+    VkMemoryBarrier hb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+    hb.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    hb.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
+    vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0, 1, &hb, 0, nullptr, 0, nullptr);
+    vkCmdSetEvent(cb, shot_.ev, VK_PIPELINE_STAGE_TRANSFER_BIT);
+    shot_.pending = true;
+}
+
+bool EnhanceChain::pollScreenshot(StreamFrame& out) {
+    std::lock_guard l(streamM_);
+    if (!shot_.pending || vkGetEventStatus(ctx_.device(), shot_.ev) != VK_EVENT_SET) return false;
+    VkMappedMemoryRange r{VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE};
+    r.memory = shot_.buf.memory;
+    r.size = VK_WHOLE_SIZE;
+    vkInvalidateMappedMemoryRanges(ctx_.device(), 1, &r);
+    out.w = int(shot_.img.width); out.h = int(shot_.img.height);
+    const auto* p = static_cast<const uint8_t*>(shot_.buf.mapped);
+    out.rgba.assign(p, p + size_t(out.w) * out.h * 4);
+    vkResetEvent(ctx_.device(), shot_.ev);
+    shot_.pending = false;
+    return true;
+}
+
 void EnhanceChain::releaseStream() {
     std::lock_guard l(streamM_);
-    bool any = false;
+    bool any = shot_.buf.buffer || shot_.ev;
     for (auto& sl : stream_) any = any || sl.img.image || sl.ev;
+    for (auto& sl : rec_) any = any || sl.y.image || sl.ev;
     if (!any) return;
     vkDeviceWaitIdle(ctx_.device());
+    for (auto& sl : rec_) {
+        ctx_.destroy(sl.y); ctx_.destroy(sl.uv); ctx_.destroy(sl.buf);
+        if (sl.ev) vkDestroyEvent(ctx_.device(), sl.ev, nullptr);
+        sl = RecSlot{};
+    }
+    ctx_.destroy(shot_.buf);
+    if (shot_.ev) vkDestroyEvent(ctx_.device(), shot_.ev, nullptr);
+    shot_ = StreamSlot{};
     for (auto& sl : stream_) {
         ctx_.destroy(sl.img);
         ctx_.destroy(sl.buf);

@@ -340,13 +340,29 @@ void MediaEngine::captureAudioLoop() {
         return;
     }
     std::vector<int16_t> buf(960 * 2);                  // 20 ms
+    // Delay line for the audio offset (sound held back to match a picture that is delayed by processing)
+    std::vector<int16_t> line;
+    size_t lineHead = 0, lineFill = 0;
     int tick = 0;
     while (!quit_) {
         if (pa_simple_read(rec, buf.data(), buf.size() * 2, &err) < 0) break;
         if (!playing_.load()) continue;
+        if (cb_.onAudio)   // the block started 20 ms ago and is heard after the audio delay
+            cb_.onAudio(buf.data(), int(buf.size() / 2),
+                        std::chrono::steady_clock::now() - std::chrono::milliseconds(20 - std::max(0, audioDelayMs_.load())));
         const float vol = muted_.load() ? 0.0f : volume_.load();
         if (vol != 1.0f)
             for (auto& s : buf) s = int16_t(std::clamp(int(std::lround(s * vol)), -32768, 32767));
+        const size_t want = size_t(std::max(0, audioDelayMs_.load())) * (kRate / 1000) * 2;   // samples (both channels)
+        if (want > 0) {
+            if (line.size() != want + buf.size()) { line.assign(want + buf.size(), 0); lineHead = 0; lineFill = want; }
+            // write the new block behind the delayed audio, then send the oldest block
+            for (size_t i = 0; i < buf.size(); ++i) line[(lineHead + lineFill + i) % line.size()] = buf[i];
+            for (size_t i = 0; i < buf.size(); ++i) buf[i] = line[(lineHead + i) % line.size()];
+            lineHead = (lineHead + buf.size()) % line.size();
+        } else if (!line.empty()) {
+            line.clear();
+        }
         if (pa_simple_write(out, buf.data(), buf.size() * 2, &err) < 0) break;
         // Capture and output clocks drift apart; keep the playback queue short so audio never lags the picture.
         if (++tick % 25 == 0 && pa_simple_get_latency(out, &err) > 150000) pa_simple_flush(out, &err);
@@ -484,8 +500,10 @@ void MediaEngine::videoLoop() {
         if (pts < seekTarget_.load() - 0.001) return true;           // accurate seek: skip pre-roll frames
         const int w = src->width, h = src->height;
         if (w <= 0 || h <= 0) return true;
-        sws = sws_getCachedContext(sws, w, h, AVPixelFormat(src->format), w, h, AV_PIX_FMT_RGBA, SWS_BILINEAR,
-                                   nullptr, nullptr, nullptr);
+        // HDR video (PQ / HLG) keeps 16 bits per channel for the GPU's tone mapping; everything else becomes RGBA8.
+        const int hdr = src->color_trc == AVCOL_TRC_SMPTE2084 ? 1 : (src->color_trc == AVCOL_TRC_ARIB_STD_B67 ? 2 : 0);
+        sws = sws_getCachedContext(sws, w, h, AVPixelFormat(src->format), w, h, hdr ? AV_PIX_FMT_RGBA64LE : AV_PIX_FMT_RGBA,
+                                   SWS_BILINEAR, nullptr, nullptr, nullptr);
         if (!sws) return false;
         int cs = SWS_CS_DEFAULT;
         switch (src->colorspace) {
@@ -498,9 +516,11 @@ void MediaEngine::videoLoop() {
         sws_setColorspaceDetails(sws, sws_getCoefficients(cs), srcRange, sws_getCoefficients(SWS_CS_DEFAULT), 1, 0,
                                  1 << 16, 1 << 16);
         auto fr = std::make_shared<Frame>();
-        fr->rgba.resize(size_t(w) * h * 4);
+        const int bpp = hdr ? 8 : 4;
+        fr->hdr = hdr;
+        fr->rgba.resize(size_t(w) * h * bpp);
         uint8_t* dst[4] = {fr->rgba.data(), nullptr, nullptr, nullptr};
-        int dstStride[4] = {w * 4, 0, 0, 0};
+        int dstStride[4] = {w * bpp, 0, 0, 0};
         sws_scale(sws, src->data, src->linesize, 0, h, dst, dstStride);
         fr->w = w; fr->h = h; fr->pts = pts; fr->serial = serial;
         const AVRational sar = av_guess_sample_aspect_ratio(fmt_, fmt_->streams[vIndex_], src);
@@ -632,6 +652,8 @@ void MediaEngine::audioLoop() {
             }
             if (quit_ || serial != serial_.load()) continue;
 
+            std::vector<int16_t> tap;
+            if (cb_.onAudio) tap.assign(buf.begin(), buf.begin() + n * 2);
             const float vol = muted_.load() ? 0.0f : volume_.load();
             if (vol != 1.0f)
                 for (int i = 0; i < n * 2; ++i)
@@ -642,6 +664,9 @@ void MediaEngine::audioLoop() {
                 if (pa_simple_write(pa, buf.data(), size_t(n) * 4, &err) < 0) { pa_simple_free(pa); pa = nullptr; paFailed = true; continue; }
                 const double lat = double(pa_simple_get_latency(pa, &err)) / 1e6;
                 if (serial == serial_.load() && playing_.load()) clock_.set(lastEnd - lat);
+                if (!tap.empty())   // the block ends 'lat' from now
+                    cb_.onAudio(tap.data(), n, std::chrono::steady_clock::now() +
+                                std::chrono::microseconds(int64_t((lat - double(n) / kRate) * 1e6)));
             }
         }
     };
@@ -737,6 +762,8 @@ void MediaEngine::renderLoop() {
         stats_.outW = ow; stats_.outH = oh;
         stats_.gpuActive = gpu;
         stats_.upError = chain_ ? chain_->upError() : std::string();
+        stats_.gpuMs = gpu && chain_ ? chain_->gpuMs() : -1.0f;
+        if (gpu && chain_) stats_.gpuStages = chain_->gpuStageMs();
     };
     // Single frame (no generation). Returns true when the GPU chain produced the picture.
     auto present = [&](const std::shared_ptr<Frame>& f, float frameMs = 1000.0f / 30.0f) -> bool {
@@ -745,16 +772,23 @@ void MediaEngine::renderLoop() {
         const auto t0 = steady::now();
         bool done = false;
         int ow = f->w, oh = f->h;
-        if (gpuReady_.load() && chain_ && !s.isIdentity()) {
+        // HDR frames always go through the GPU: they need tone mapping even with every enhancement off
+        if (gpuReady_.load() && chain_ && (!s.isIdentity() || f->hdr)) {
             std::string err;
-            if (chain_->process(f->rgba.data(), f->w, f->h, f->w * 4, s, out, ow, oh, err, frameMs)) {
+            if (chain_->process(f->rgba.data(), f->w, f->h, f->w * (f->hdr ? 8 : 4), s, out, ow, oh, err, frameMs, f->hdr)) {
                 deliver(out.data(), ow, oh, f->aspect);
                 done = true;
             } else gpuFailed(err);
         }
         if (!done) {
             ow = f->w; oh = f->h;
-            deliver(f->rgba.data(), f->w, f->h, f->aspect);
+            if (f->hdr) {   // no GPU: show the high bytes (not tone-mapped - washed out, but visible)
+                std::vector<uint8_t> b(size_t(f->w) * f->h * 4);
+                for (size_t i = 0; i < b.size(); ++i) b[i] = f->rgba[2 * i + 1];
+                deliver(b.data(), f->w, f->h, f->aspect);
+            } else {
+                deliver(f->rgba.data(), f->w, f->h, f->aspect);
+            }
         }
         setStats(t0, ow, oh, done);
         return done;
@@ -813,7 +847,8 @@ void MediaEngine::renderLoop() {
         }
         const double gap = f->pts - prevPts;
         if (!showOne_.load()) {
-            const double delay = f->pts - clock_.get();
+            // audio offset: a positive value shows the picture earlier against the audio clock (= sound later)
+            const double delay = f->pts - audioDelayMs_.load() * 0.001 - clock_.get();
             if (delay > 0.004) { napGate(delay); continue; }
             size_t pending;
             { std::lock_guard l(fq_m_); pending = frames_.size(); }

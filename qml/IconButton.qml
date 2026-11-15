@@ -8,7 +8,7 @@ Item {
     width: size; height: size
     Rectangle {
         anchors.fill: parent; radius: width / 2
-        color: root.active ? "#33ff7a45" : (ma.containsMouse ? "#22ffffff" : "transparent")
+        color: root.active ? Theme.accentSoft : (ma.containsMouse ? Theme.border : "transparent")
         Behavior on color { ColorAnimation { duration: 120 } }
     }
     Image {

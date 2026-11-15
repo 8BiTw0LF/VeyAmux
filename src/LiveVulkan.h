@@ -34,10 +34,18 @@ public:
     QSize imageSize() const { return QSize(imgW_.load(), imgH_.load()); }
     uint64_t generation() const { return gen_.load(); }
     double lastMs() const { return lastMs_.load(); }
+    // VeyAmux's share of the latency: capture driver timestamp -> GPU work done (smoothed), 0 = unknown
+    double pipelineMs() const { return pipeMs_.load(); }
+    float gpuMs() const { std::lock_guard l(m_); return gpuMs_; }
+    std::array<float, veyamux::GpuTimer::kStages> gpuStageMs() const { std::lock_guard l(m_); return gpuStages_; }
     uint64_t framesShown() const { return shown_.load(); }   // frames handed to the display
     // OBS stream: maxHeight -1 = off, 0 = original size. The sink gets every displayed picture
     // from a worker thread, with the delay that keeps the on-screen pacing.
     void setStream(int maxHeight, std::function<void(QImage, int)> sink);
+    // Recording: maxHeight -1 = off, 0 = original. The sink gets every displayed picture as NV12 (worker thread).
+    void setRecord(int maxHeight, std::function<void(veyamux::EnhanceChain::RecFrame&&)> sink);
+    // The next displayed picture at full size, delivered once to the callback (worker thread).
+    void requestScreenshot(std::function<void(QImage)> cb);
     QString lastError() const;
     QString lastUpError() const;
 
@@ -61,6 +69,9 @@ private:
     std::atomic<uint64_t> image_{0}, gen_{0};
     std::atomic<int> imgW_{0}, imgH_{0};
     std::atomic<double> lastMs_{0};
+    std::atomic<double> pipeMs_{0};
+    float gpuMs_ = -1;
+    std::array<float, veyamux::GpuTimer::kStages> gpuStages_{};
     uint64_t seenGen_ = 0;
     // frame generation pacing
     std::chrono::steady_clock::time_point lastArrival_{};
@@ -70,6 +81,8 @@ private:
     std::atomic<uint64_t> shown_{0};
     std::mutex sinkM_;
     std::function<void(QImage, int)> sink_;
+    std::function<void(veyamux::EnhanceChain::RecFrame&&)> recSink_;
+    std::function<void(QImage)> shotCb_;
     std::thread streamThread_;
     std::atomic<bool> streamQuit_{false};
     void streamLoop();

@@ -428,6 +428,7 @@ CaptureSource::Result CaptureSource::readLatest(RawFrame& out, int timeoutMs, st
     std::string e;
     if (!dequeueNewest(b, e)) { if (!e.empty()) { error = e; return Result::Error; } return Result::Timeout; }
     Result res = Result::Timeout;
+    out.captured = captureTime(b);
     if (!(b.flags & V4L2_BUF_FLAG_ERROR) && b.bytesused > 0 && b.index < bufs_.size()) {
         const uint8_t* src = static_cast<const uint8_t*>(bufs_[b.index].start);
         const size_t len = b.bytesused;

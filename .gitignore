@@ -1,7 +1,7 @@
 # build output
 /build/
 /dist/
-/.tools/
+/.tools
 *.AppImage
 # editors
 *.swp

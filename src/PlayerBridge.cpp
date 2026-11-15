@@ -1,4 +1,6 @@
 #include "PlayerBridge.h"
+#include <QUrl>
+#include <QTimer>
 #include <QCoreApplication>
 #include <QClipboard>
 #include <QFile>
@@ -13,18 +15,29 @@
 #include <QRegularExpression>
 #include <QVariantMap>
 #include <QSettings>
+#include <QDateTime>
+#include <QDesktopServices>
+#include <QStandardPaths>
 
 using veyamux::MediaEngine;
 
 PlayerBridge::PlayerBridge(const QString& shaderDir, QObject* parent)
-    : QObject(parent), engine_(shaderDir.toStdString()) {
+    : QObject(parent), engine_(shaderDir.toStdString()), rec_(std::make_unique<veyamux::Recorder>()) {
+    rec_->onMessage = [this](const std::string& m, bool error) {
+        const QString q = QString::fromStdString(m);
+        QMetaObject::invokeMethod(this, [this, q, error] { onRecMessage(q, error); }, Qt::QueuedConnection);
+    };
     loadSettings();
     connect(&obs_, &ObsStream::viewersChanged, this, [this] { updateObsSource(); emit obsChanged(); });
     if (QSettings().value("obs/enabled", false).toBool()) setObsEnabled(true);
     MediaEngine::Callbacks cb;
     cb.onFrame = [this](const uint8_t* rgba, int w, int h, double aspect) {
         QImage img = QImage(rgba, w, h, w * 4, QImage::Format_RGBA8888).copy();   // detach from engine buffer
-        if (obs_.wantsFrames() && !liveVulkanActive()) obs_.pushFrame(img);        // shared, not copied
+        if (!liveVulkanActive() && (obs_.wantsFrames() || rec_->active())) {
+            const QImage sdr = s_.hdrOut ? sdrCopy(img) : img;
+            if (obs_.wantsFrames()) obs_.pushFrame(sdr);        // shared, not copied
+            if (rec_->active()) rec_->pushRgba(sdr.constBits(), w, h, int(sdr.bytesPerLine()), recHeight_, std::chrono::steady_clock::now());
+        }
         bool post = false;
         {
             QMutexLocker l(&imgMutex_);
@@ -51,10 +64,18 @@ PlayerBridge::PlayerBridge(const QString& shaderDir, QObject* parent)
         }, Qt::QueuedConnection);
     };
     cb.onLiveFrame = [this](veyamux::RawFrame&& f) { if (liveVk_) liveVk_->submit(std::move(f)); };
+    cb.onAudio = [this](const int16_t* pcm, int frames, std::chrono::steady_clock::time_point t) { rec_->pushAudio(pcm, frames, t); };
     engine_.setCallbacks(cb);
     applyEnhance();
+    {
+        QSettings q;
+        replaySeconds_ = std::clamp(q.value("rec/replaySeconds", 30).toInt(), 10, 300);
+        recHeight_ = std::clamp(q.value("rec/height", 1080).toInt(), 0, 4320);
+        if (q.value("rec/replay", false).toBool()) setReplay(true);
+    }
     tick_.setInterval(100);
     connect(&tick_, &QTimer::timeout, this, [this] {
+        if (rec_->recording()) emit recTick();
         if (!engine_.isOpen()) return;
         emit positionChanged();
         if (engine_.playing() != lastPlaying_) { lastPlaying_ = engine_.playing(); emit playingChanged(); }
@@ -67,8 +88,10 @@ PlayerBridge::PlayerBridge(const QString& shaderDir, QObject* parent)
         }
         if (liveVulkanActive()) {
             const QSize sz = liveVk_->imageSize();
-            perf_ = QString("%1×%2 · %3 ms · %4").arg(sz.width()).arg(sz.height()).arg(liveVk_->lastMs(), 0, 'f', 1)
-                        .arg(L("GPU direct", "GPU direkte"));
+            const double pipe = liveVk_->pipelineMs();
+            perf_ = delayText(pipe > 0 ? pipe : std::max(0.0, double(liveVk_->gpuMs())) + liveVk_->lastMs(), pipe > 0, sz);
+            if (qEnvironmentVariableIsSet("VEYAMUX_DEBUG_FG"))
+                qInfo("timing:%s", qPrintable(timingText(liveVk_->gpuMs(), liveVk_->gpuStageMs(), liveVk_->lastMs(), pipe)));
             gpuName_ = L("Vulkan (shared with the UI)", "Vulkan (delt med brugerfladen)");
             upError_ = s_.upscaler == veyamux::Upscaler::AmdFsr3 ? translateMessage(liveVk_->lastUpError()) : QString();
             updateLsfgMultiplier();
@@ -77,9 +100,8 @@ PlayerBridge::PlayerBridge(const QString& shaderDir, QObject* parent)
         }
         upError_ = s_.upscaler == veyamux::Upscaler::AmdFsr3 ? translateMessage(QString::fromStdString(st.upError)) : QString();
         updateLsfgMultiplier();
-        perf_ = QString("%1×%2 · %3 ms%4")
-                    .arg(st.outW).arg(st.outH).arg(st.processMs, 0, 'f', 1)
-                    .arg(st.dropped ? QString(" · %1 %2").arg(st.dropped).arg(L("dropped", "tabt")) : QString());
+        perf_ = delayText(st.gpuActive ? std::max(0.0, double(st.gpuMs)) + st.processMs : st.processMs, false, QSize(st.outW, st.outH))
+                + (st.dropped ? QString(" · %1 %2").arg(st.dropped).arg(L("dropped", "tabt")) : QString());
         if (!engine_.gpuName().empty()) gpuName_ = QString::fromStdString(engine_.gpuName());
         emit statsChanged();
     });
@@ -88,7 +110,7 @@ PlayerBridge::PlayerBridge(const QString& shaderDir, QObject* parent)
 
 PlayerBridge::~PlayerBridge() {
     saveSettings();
-    if (liveVk_) liveVk_->setStream(-1, nullptr);
+    if (liveVk_) { liveVk_->setStream(-1, nullptr); liveVk_->setRecord(-1, nullptr); }
     obs_.stop();
     engine_.close();
 }
@@ -131,6 +153,131 @@ void PlayerBridge::updateObsSource() {
     liveVk_->setStream(want, want < 0 ? std::function<void(QImage, int)>() : [this](QImage img, int delayMs) { obs_.pushFrame(std::move(img), delayMs); });
 }
 
+// ---------------------------------------------------------------- instant replay / recording / screenshots
+
+QString PlayerBridge::recFolder(bool pictures) const {
+    QString base = QStandardPaths::writableLocation(pictures ? QStandardPaths::PicturesLocation : QStandardPaths::MoviesLocation);
+    if (base.isEmpty()) base = QDir::homePath();
+    const QString dir = QSettings().value(pictures ? "rec/shotFolder" : "rec/folder", base + "/VeyAmux").toString();
+    QDir().mkpath(dir);
+    return dir;
+}
+
+static QString stamp() { return QDateTime::currentDateTime().toString("yyyy-MM-dd_HH-mm-ss"); }
+
+void PlayerBridge::updateRecordSource() {
+    if (!liveVk_) return;
+    const int want = rec_->active() ? recHeight_ : -1;
+    if (want == recStreamH_) return;
+    recStreamH_ = want;
+    liveVk_->setRecord(want, want < 0 ? std::function<void(veyamux::EnhanceChain::RecFrame&&)>()
+                                      : [this](veyamux::EnhanceChain::RecFrame&& f) { rec_->pushVideo(std::move(f.nv12), f.w, f.h, f.t); });
+}
+
+void PlayerBridge::setReplay(bool v) {
+    replay_ = v;
+    rec_->setReplay(v, replaySeconds_);
+    QSettings().setValue("rec/replay", v);
+    updateRecordSource();
+    emit recChanged();
+}
+
+void PlayerBridge::setReplaySeconds(int s) {
+    replaySeconds_ = std::clamp(s, 10, 300);
+    QSettings().setValue("rec/replaySeconds", replaySeconds_);
+    if (replay_) rec_->setReplay(true, replaySeconds_);
+    emit recChanged();
+}
+
+void PlayerBridge::setRecHeight(int h) {
+    recHeight_ = std::clamp(h, 0, 4320);
+    QSettings().setValue("rec/height", recHeight_);
+    recStreamH_ = -2;
+    updateRecordSource();
+    emit recChanged();
+}
+
+QString PlayerBridge::recInfo() const {
+    const QString enc = QString::fromStdString(rec_->encoderName());
+    const QString e = enc.isEmpty() ? QString() : enc.contains("vaapi") ? enc.section('_', 0, 0).toUpper() + L(" (GPU, VA-API)", " (GPU, VA-API)")
+                                                                         : enc + L(" (CPU)", " (CPU)");
+    if (rec_->recording()) {
+        const int s = int(rec_->recordingSeconds());
+        return L("● REC %1:%2", "● OPTAGER %1:%2").arg(s / 60).arg(s % 60, 2, 10, QChar('0')) + (e.isEmpty() ? "" : "  ·  " + e);
+    }
+    return e;
+}
+
+void PlayerBridge::saveReplay() {
+    if (!replay_) { showNotice(L("Instant replay is off", "Instant replay er slået fra")); return; }
+    const QString path = recFolder(false) + "/VeyAmux-replay_" + stamp() + ".mp4";
+    if (!rec_->saveReplay(path.toStdString())) showNotice(L("Nothing to save yet", "Intet at gemme endnu"));
+    else showNotice(L("Saving replay…", "Gemmer replay…"));
+}
+
+void PlayerBridge::toggleRecording() {
+    if (rec_->recording()) {
+        rec_->stopRecording();
+    } else {
+        if (!engine_.isOpen() && !liveVulkanActive()) { showNotice(L("Nothing is playing", "Der afspilles ikke noget")); return; }
+        rec_->startRecording((recFolder(false) + "/VeyAmux_" + stamp() + ".mp4").toStdString());
+    }
+    updateRecordSource();
+    emit recChanged();
+    emit recTick();
+}
+
+void PlayerBridge::screenshot() {
+    const QString path = recFolder(true) + "/VeyAmux_" + stamp() + ".png";
+    auto save = [this, path](QImage img) {
+        if (s_.hdrOut) img = sdrCopy(img);
+        const bool ok = !img.isNull() && img.convertToFormat(QImage::Format_RGB888).save(path, "PNG");
+        QMetaObject::invokeMethod(this, [this, ok, path] {
+            showNotice(ok ? L("Screenshot saved: %1", "Skærmbillede gemt: %1").arg(QFileInfo(path).fileName())
+                          : L("Could not save the screenshot", "Kunne ikke gemme skærmbilledet"));
+        }, Qt::QueuedConnection);
+    };
+    if (liveVulkanActive()) { liveVk_->requestScreenshot(save); return; }
+    QImage img;
+    { QMutexLocker l(&imgMutex_); img = image_; }
+    save(img);
+}
+
+QImage PlayerBridge::sdrCopy(QImage img) const {
+    // per channel, the same curve as PqCodedToSdr() in shaders/PqCode.hlsli
+    static const std::array<uint8_t, 256> lut = [] {
+        std::array<uint8_t, 256> t{};
+        const double m1 = 2610.0 / 16384, m2 = 2523.0 / 32, c1 = 3424.0 / 4096, c2 = 2413.0 / 128, c3 = 2392.0 / 128;
+        for (int i = 0; i < 256; ++i) {
+            const double e = std::pow(i / 255.0, 1.0 / m2);
+            const double x = 10000.0 * std::pow(std::max(e - c1, 0.0) / (c2 - c3 * e), 1.0 / m1) / 203.0;
+            const double knee = 0.75;
+            double y = x <= knee ? x : knee + (1 - knee) * (1 - std::exp(-(x - knee) / (1 - knee)));
+            y = std::clamp(y, 0.0, 1.0);
+            y = y <= 0.0031308 ? y * 12.92 : 1.055 * std::pow(y, 1 / 2.4) - 0.055;
+            t[size_t(i)] = uint8_t(std::lround(y * 255));
+        }
+        return t;
+    }();
+    img = img.convertToFormat(QImage::Format_RGBA8888);
+    for (int y = 0; y < img.height(); ++y) {
+        uint8_t* p = img.scanLine(y);
+        for (int x = 0; x < img.width(); ++x, p += 4) { p[0] = lut[p[0]]; p[1] = lut[p[1]]; p[2] = lut[p[2]]; }
+    }
+    return img;
+}
+
+void PlayerBridge::openRecordingsFolder() { QDesktopServices::openUrl(QUrl::fromLocalFile(recFolder(false))); }
+
+void PlayerBridge::onRecMessage(const QString& m, bool error) {
+    if (m == "recording-started") showNotice(L("Recording started", "Optagelse startet"));
+    else if (m == "recording-saved") { showNotice(L("Recording saved", "Optagelse gemt")); updateRecordSource(); }
+    else if (m.startsWith("replay-saved:")) showNotice(L("Replay saved: %1", "Replay gemt: %1").arg(QFileInfo(m.mid(13)).fileName()));
+    else showNotice((error ? L("Recording error: ", "Optagefejl: ") : QString()) + m);
+    emit recChanged();
+    emit recTick();
+}
+
 void PlayerBridge::saveObsFile() {
     const QString start = obsFile_.isEmpty() ? QDir::homePath() + "/VeyAmux-OBS.html" : obsFile_;
     QString path = QFileDialog::getSaveFileName(nullptr, L("Save the OBS browser file", "Gem browserfilen til OBS"), start,
@@ -160,11 +307,13 @@ void PlayerBridge::loadSettings() {
     obsFile_ = q.value("obs/file").toString();
     s_.enabled = q.value("enh/enabled", true).toBool();
     s_.scale = float(q.value("enh/scale", 1.0).toDouble());
-    s_.upscaler = veyamux::Upscaler(std::clamp(q.value("enh/upscaler", 0).toInt(), 0, 1));
+    s_.upscaler = veyamux::Upscaler(std::clamp(q.value("enh/upscaler", 0).toInt(), 0, 2));
     s_.fxaa = q.value("enh/fxaa", false).toBool();
     s_.denoise = veyamux::Denoise(std::clamp(q.value("enh/denoise", 0).toInt(), 0, 3));
     s_.denoiseStrength = std::clamp(q.value("enh/denoiseStrength", 1).toInt(), 0, 2);
     s_.hdrPeak = float(std::clamp(q.value("enh/hdrPeak", 1000).toInt(), 203, 10000));
+    s_.displayPeak = float(std::clamp(q.value("enh/displayPeak", 1000).toInt(), 203, 10000));
+    hdrOutWanted_ = q.value("enh/hdrOut", false).toBool();
     s_.vrr = q.value("enh/vrr", false).toBool();
     // Default: Lossless Scaling 2x. The old in-app modes (1 AMD FSR / RIFE, 4 RIFE + Lossless Scaling) become 2x.
     {
@@ -179,6 +328,7 @@ void PlayerBridge::loadSettings() {
     s_.contrast = float(q.value("enh/contrast", 1.0).toDouble());
     s_.saturation = float(q.value("enh/saturation", 1.0).toDouble());
     volume_ = q.value("audio/volume", 1.0).toDouble();
+    audioDelay_ = std::clamp(q.value("audio/delayMs", 0).toInt(), -300, 300);
     muted_ = q.value("audio/muted", false).toBool();
 }
 
@@ -214,6 +364,39 @@ void PlayerBridge::updateOutputFps(uint64_t shownTotal) {
     outFps_ = engine_.playing() ? fps : 0.0;
     if (qEnvironmentVariableIsSet("VEYAMUX_DEBUG_FPS")) qInfo("output fps %.1f (playing %d)", fps, int(engine_.playing()));
     if (std::lround(old) != std::lround(outFps_)) emit mediaChanged();
+}
+
+// Timing lines under the menu: measured GPU time (Vulkan timestamps) per stage, the CPU time to record the work and,
+// live, VeyAmux's share of the latency (capture driver timestamp -> GPU work done).
+// One number for the menu: live = capture driver timestamp -> picture finished on the GPU (what VeyAmux adds before the
+// display), files = processing time per picture. Averaged and refreshed once a second, so it is readable (and frame
+// generation does not blend two different numbers into each other).
+QString PlayerBridge::delayText(double ms, bool live, QSize size) {
+    delaySum_ += ms; ++delayN_;
+    if (delayShown_ < 0 || delayClock_.elapsed() >= 1000 || !delayClock_.isValid()) {
+        delayShown_ = delaySum_ / std::max(1, delayN_);
+        delaySum_ = 0; delayN_ = 0;
+        delayClock_.start();
+    }
+    return (live ? L("Delay in VeyAmux: %1 ms", "Forsinkelse i VeyAmux: %1 ms") : L("Processing: %1 ms per picture", "Behandling: %1 ms pr. billede"))
+               .arg(delayShown_, 0, 'f', 1)
+           + QString("  (%1×%2)").arg(size.width()).arg(size.height());
+}
+
+QString PlayerBridge::timingText(float gpu, const std::array<float, veyamux::GpuTimer::kStages>& st, double cpuMs, double pipeMs) const {
+    QString t;
+    if (gpu >= 0) t += QString(" · GPU %1 ms").arg(double(gpu), 0, 'f', 2);
+    t += QString(" · CPU %1 ms").arg(cpuMs, 0, 'f', 2);
+    if (pipeMs > 0) t += L(" · in VeyAmux %1 ms", " · i VeyAmux %1 ms").arg(pipeMs, 0, 'f', 1);
+    if (gpu >= 0) {
+        static const char* en[] = {"input", "noise red.", "FXAA", "upscale", "finish", "OBS"};
+        static const char* da[] = {"ind", "støjfjern.", "FXAA", "opskal.", "afslut.", "OBS"};
+        QStringList parts;
+        for (int i = 0; i < veyamux::GpuTimer::kStages; ++i)
+            if (st[size_t(i)] >= 0) parts << QString("%1 %2").arg(L(en[i], da[i])).arg(double(st[size_t(i)]), 0, 'f', 2);
+        if (!parts.isEmpty()) t += "\n" + parts.join(" · ");
+    }
+    return t;
 }
 
 // "→ 120 fps" after the source rate when frame generation raises it: source rate x multiplier for Lossless Scaling
@@ -259,6 +442,13 @@ QString PlayerBridge::mediaInfo() const {
 QImage PlayerBridge::currentImage() { QMutexLocker l(&imgMutex_); return image_; }
 
 void PlayerBridge::setStatus(const QString& s) { status_ = s; emit statusChanged(); }
+void PlayerBridge::showNotice(const QString& s) {
+    notice_ = s;
+    ++noticeSeq_;
+    emit noticeChanged();
+    const int seq = noticeSeq_;
+    QTimer::singleShot(2500, this, [this, seq] { if (seq == noticeSeq_) { notice_.clear(); emit noticeChanged(); } });
+}
 
 bool PlayerBridge::openUrl(const QUrl& url) { return openPath(url.isLocalFile() ? url.toLocalFile() : url.toString()); }
 
@@ -273,6 +463,7 @@ bool PlayerBridge::openPath(const QString& path) {
     }
     updateLsfgMultiplier();
     engine_.setVolume(float(volume_));
+    engine_.setAudioDelay(audioDelay_);
     engine_.setMuted(muted_);
     applyEnhance();
     setStatus({});
@@ -303,7 +494,7 @@ void PlayerBridge::applyEnhance() { engine_.setEnhance(s_); if (liveVk_) liveVk_
 void PlayerBridge::setEnhance(bool v) { s_.enabled = v; applyEnhance(); }
 void PlayerBridge::setScale(double v) { s_.scale = float(qBound(1.0, v, 4.0)); applyEnhance(); }
 void PlayerBridge::setUpscaler(int v) {
-    v = std::clamp(v, 0, 1);
+    v = std::clamp(v, 0, 2);
     if (int(s_.upscaler) == v) return;
     s_.upscaler = veyamux::Upscaler(v);
     applyEnhance();
@@ -332,10 +523,105 @@ void PlayerBridge::setExposure(double v) { s_.exposure = float(qBound(-3.0, v, 3
 void PlayerBridge::setContrast(double v) { s_.contrast = float(qBound(0.5, v, 1.5)); applyEnhance(); }
 void PlayerBridge::setSaturation(double v) { s_.saturation = float(qBound(0.0, v, 2.0)); applyEnhance(); }
 void PlayerBridge::resetEnhance() {
-    const bool en = s_.enabled;
+    // picture settings only: frame generation and VRR (which may need a restart) are kept
+    const auto keep = s_;
     s_ = veyamux::EnhanceSettings{};
-    s_.enabled = en;
+    s_.enabled = keep.enabled; s_.frameGen = keep.frameGen; s_.vrr = keep.vrr; s_.hdrPeak = keep.hdrPeak; s_.hdrOut = keep.hdrOut; s_.displayPeak = keep.displayPeak;
+    activeProfile_.clear();
+    emit profilesChanged();
     applyEnhance();
+}
+
+// ------------------------------------------------------------------ profiles
+
+QStringList PlayerBridge::profiles() const {
+    QSettings q;
+    QStringList order = q.value("profiles/order").toStringList();
+    q.beginGroup("profiles");
+    const QStringList groups = q.childGroups();
+    q.endGroup();
+    QStringList out;
+    for (const auto& n : order) if (groups.contains(QString(QUrl::toPercentEncoding(n)))) out << n;
+    return out;
+}
+
+QString PlayerBridge::signalKey() const {
+    if (!engine_.isLive()) return {};
+    const auto& i = engine_.info();
+    return QString("%1x%2@%3 %4").arg(i.width).arg(i.height).arg(std::lround(i.fps)).arg(QString::fromStdString(i.videoCodec));
+}
+
+QString PlayerBridge::profileSignal(const QString& name) const {
+    return QSettings().value("profiles/" + QString(QUrl::toPercentEncoding(name)) + "/signal").toString();
+}
+
+void PlayerBridge::saveProfile(const QString& rawName, bool bindToSignal) {
+    const QString name = rawName.trimmed().left(24);
+    if (name.isEmpty()) return;
+    QSettings q;
+    const QString g = "profiles/" + QString(QUrl::toPercentEncoding(name)) + "/";
+    q.setValue(g + "enabled", s_.enabled); q.setValue(g + "scale", double(s_.scale)); q.setValue(g + "upscaler", int(s_.upscaler));
+    q.setValue(g + "fxaa", s_.fxaa); q.setValue(g + "fxaaQuality", s_.fxaaQuality);
+    q.setValue(g + "denoise", int(s_.denoise)); q.setValue(g + "denoiseStrength", s_.denoiseStrength);
+    q.setValue(g + "hdrPeak", hdrPeak());
+    q.setValue(g + "sharpen", double(s_.sharpen)); q.setValue(g + "exposure", double(s_.exposure));
+    q.setValue(g + "contrast", double(s_.contrast)); q.setValue(g + "saturation", double(s_.saturation));
+    q.setValue(g + "audioDelay", audioDelay_);
+    const QString sig = bindToSignal ? signalKey() : QString();
+    if (!sig.isEmpty()) {   // one profile per signal: unbind the others
+        for (const auto& other : profiles())
+            if (other != name && profileSignal(other) == sig) q.remove("profiles/" + QString(QUrl::toPercentEncoding(other)) + "/signal");
+        q.setValue(g + "signal", sig);
+    } else {
+        q.remove(g + "signal");
+    }
+    QStringList order = q.value("profiles/order").toStringList();
+    if (!order.contains(name)) order << name;
+    q.setValue("profiles/order", order);
+    activeProfile_ = name;
+    emit profilesChanged();
+}
+
+bool PlayerBridge::loadProfile(const QString& name) {
+    QSettings q;
+    const QString g = "profiles/" + QString(QUrl::toPercentEncoding(name)) + "/";
+    if (!q.contains(g + "scale")) return false;
+    s_.enabled = q.value(g + "enabled", true).toBool();
+    s_.scale = float(q.value(g + "scale", 1.0).toDouble());
+    s_.upscaler = veyamux::Upscaler(std::clamp(q.value(g + "upscaler", 0).toInt(), 0, 2));
+    s_.fxaa = q.value(g + "fxaa", false).toBool();
+    s_.fxaaQuality = std::clamp(q.value(g + "fxaaQuality", 1).toInt(), 0, 2);
+    s_.denoise = veyamux::Denoise(std::clamp(q.value(g + "denoise", 0).toInt(), 0, 3));
+    s_.denoiseStrength = std::clamp(q.value(g + "denoiseStrength", 1).toInt(), 0, 2);
+    s_.hdrPeak = float(std::clamp(q.value(g + "hdrPeak", 1000).toInt(), 203, 10000));
+    s_.sharpen = float(q.value(g + "sharpen", 0.0).toDouble());
+    s_.exposure = float(q.value(g + "exposure", 0.0).toDouble());
+    s_.contrast = float(q.value(g + "contrast", 1.0).toDouble());
+    s_.saturation = float(q.value(g + "saturation", 1.0).toDouble());
+    setAudioDelay(q.value(g + "audioDelay", 0).toInt());
+    activeProfile_ = name;
+    emit profilesChanged();
+    applyEnhance();
+    showNotice(L("Profile: %1", "Profil: %1").arg(name));
+    return true;
+}
+
+void PlayerBridge::deleteProfile(const QString& name) {
+    QSettings q;
+    q.remove("profiles/" + QString(QUrl::toPercentEncoding(name)));
+    QStringList order = q.value("profiles/order").toStringList();
+    order.removeAll(name);
+    q.setValue("profiles/order", order);
+    if (activeProfile_ == name) activeProfile_.clear();
+    emit profilesChanged();
+}
+
+// A capture signal with a bound profile gets it applied when it is opened.
+void PlayerBridge::applySignalProfile() {
+    const QString sig = signalKey();
+    if (sig.isEmpty()) return;
+    for (const auto& n : profiles())
+        if (profileSignal(n) == sig) { loadProfile(n); return; }
 }
 
 // ------------------------------------------------------------------ capture card support
@@ -418,10 +704,12 @@ bool PlayerBridge::openCapture(const QString& path, int modeIndex, const QString
     if (engine_.info().height > 0) aspect_ = double(engine_.info().width) / engine_.info().height;
     if (zeroCopy) { liveVk_->setSettings(s_); liveVk_->setActive(true); }
     engine_.setVolume(float(volume_));
+    engine_.setAudioDelay(audioDelay_);
     engine_.setMuted(muted_);
     applyEnhance();
     setStatus({});
     emit mediaChanged();
+    applySignalProfile();
     lastPlaying_ = true;
     emit playingChanged();
     return true;

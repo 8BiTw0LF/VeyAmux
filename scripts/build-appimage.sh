@@ -3,7 +3,7 @@
 # Needs (Ubuntu 24.04 names): cmake ninja-build g++ pkg-config qt6-base-dev qt6-declarative-dev qt6-svg-dev
 #   qt6-wayland libvulkan-dev libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libswresample-dev
 #   libpulse-dev libva-dev qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtquick-layouts patchelf file
-#   python3 glslang-tools  (AMD FidelityFX shader generation)
+#   python3 glslang-tools  (AMD FidelityFX shader generation)  qt6-shader-baker (qsb, HDR output shaders)  zsync (zsyncmake)
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD="${BUILD_DIR:-$ROOT/build}"; APPDIR="$BUILD/AppDir"; OUT="${OUT_DIR:-$ROOT/dist}"
@@ -26,11 +26,17 @@ export PATH="$T/appimage:$PATH"
 
 # The Vulkan loader and every GPU driver must come from the HOST (RADV/ANV/NVIDIA ICDs live there).
 find "$APPDIR" \( -name 'libvulkan.so*' -o -name 'libGL.so*' -o -name 'libEGL.so*' -o -name 'libGLX*.so*' -o -name 'libOpenGL.so*' \
-  -o -name 'libdrm*.so*' -o -name 'libgbm.so*' -o -name 'libwayland-*.so*' -o -name 'libsystemd.so*' -o -name 'libdbus-1.so*' \) -delete
+  -o -name 'libdrm*.so*' -o -name 'libgbm.so*' -o -name 'libwayland-*.so*' -o -name 'libsystemd.so*' -o -name 'libdbus-1.so*' \
+  -o -name 'libva.so*' -o -name 'libva-*.so*' \) -delete
+# libva too (instant replay / recording use VA-API): the host's libva knows where the host's VA driver lives
+# (/usr/lib64/dri on Fedora/Bazzite, /usr/lib/x86_64-linux-gnu/dri on Debian/Ubuntu); a bundled one would not find it.
 
 # NOTE: AppRun is a plain symlink to the binary, so env setup lives in main.cpp (not in apprun-hooks).
 
 # Pass 2: build the AppImage from the cleaned AppDir (appimagetool does not re-resolve libraries).
 mkdir -p "$OUT"
-ARCH=x86_64 "$T/appimage/appimagetool-x86_64.AppImage" --no-appstream "$APPDIR" "$OUT/VeyAmux-x86_64.AppImage"
-echo "Built: $OUT/VeyAmux-x86_64.AppImage"
+# Update information: AppImageUpdate / Gear Lever find new versions among the GitHub releases (upload the .zsync file
+# next to the AppImage in every release).
+UPDATE_INFO="${VEYAMUX_UPDATE_INFO:-gh-releases-zsync|8BiTw0LF|VeyAmux|latest|VeyAmux-x86_64.AppImage.zsync}"
+( cd "$OUT" && ARCH=x86_64 "$T/appimage/appimagetool-x86_64.AppImage" --no-appstream -u "$UPDATE_INFO" "$APPDIR" "VeyAmux-x86_64.AppImage" )
+echo "Built: $OUT/VeyAmux-x86_64.AppImage (+ .zsync for the release)"

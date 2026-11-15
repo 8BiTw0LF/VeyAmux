@@ -21,7 +21,7 @@ sudo apt install cmake ninja-build g++ pkg-config patchelf file python3 glslang-
 | Afspilning (FFmpeg), seek, pause, volumen, drag&drop, fuldskærm | ✅ |
 | Hardware-dekodning på AMD/Intel (VAAPI), automatisk fallback til software | ✅ (ikke testet på rigtig GPU endnu) |
 | Lyd via PulseAudio/PipeWire (lyd er master-clock) | ✅ |
-| GPU-kæde: RgbToLinear → [støjfjerning: temporal/NLM] → FXAA (AaLuma+AaFxaa, originale shaders) → Lanczos-3 **eller AMD FSR 3.1** opskalering → sharpen/eksponering/kontrast/mætning → ScaleBlit (sRGB) | ✅ |
+| GPU-kæde: RgbToLinear → [støjfjerning: temporal/NLM] → FXAA (AaLuma+AaFxaa, originale shaders) → Lanczos-3, **AMD FSR 1 eller AMD FSR 3.1** opskalering → sharpen/eksponering/kontrast/mætning → ScaleBlit (sRGB) eller LxPqOut (PQ, HDR-output) | ✅ |
 | **AMD FSR 3.1-opskalering** (eksperimentel): FidelityFX SDK 1.1.4 FSR 3.1 upscaler på Vulkan med VeyAmux' egen sub-pixel-bevægelsesmåling | ✅ (blødere end Lanczos i test, se nedenfor) |
 | **Lossless Scaling frame generation** (Fast 2× / Fast 3×) via brugerens egen lsfg-vk + Lossless Scaling fra Steam | ✅ testet af brugeren på RX 9070 XT / Bazzite |
 | Vulkan-device vælges automatisk (diskret GPU først); `VEYAMUX_VK_DEVICE=<n>` tvinger valg | ✅ |
@@ -93,6 +93,10 @@ som URL-browserkilde, og `/snapshot.jpg` giver det seneste billede.
 ## Opskalering
 Menu → *Forbedring* → *Opskalering* (1,5× / 2× / 3×) og *Metode*:
 - **Lanczos** (standard) – skarp klassisk skalering billede for billede, ingen ekstra forsinkelse.
+- **AMD FSR 1** – EASU (kantadaptiv opskalering) + RCAS (skarphed, 0,5 stop; `VEYAMUX_FSR1_RCAS=<stop>`) fra FidelityFX
+  SDK'ens `ffx_fsr1.h`, billede for billede (`shaders/LxFsr1.hlsl`), i gamma-2-domænet. Målt 2×: fine detaljer 32,2 dB /
+  detaljegrad 0,93 (Lanczos 32,0 dB / 0,61), naturligt motiv 49,0 / 49,5 dB, vektorgrafik 35,6 / 37,3 dB – synligt
+  skarpere uden ringning, men lidt lavere PSNR på skarpe kanter.
 - **AMD FSR 3.1** (eksperimentel) – AMD FidelityFX SDK 1.1.4 (open source). FSR 3.1 er en *temporal* opskalerer: den samler
   detaljer over flere billeder og skal vide, hvordan hver pixel har bevæget sig, ned til brøkdele af en pixel. Spil giver
   den præcise bevægelsesvektorer og rykker kameraet en brøkdel af en pixel hvert billede (jitter); video har ingen af delene.
@@ -129,8 +133,53 @@ direkte til VeyAmux' lineære arbejdsbillede (ingen 8-bit-mellemtrin): BT.2020 N
 egne HDR-funktioner. *HDR-capture: kildens maks. lysstyrke* (600/1000/2000/4000 nits, standard 1000) skal passe til
 spillets/konsollens HDR-kalibrering. Testet med et syntetisk P010-signal (`VEYAMUX_TEST_LIVE=p010`: PQ-gråskala
 0–4000 nits, 203-nits farvefelter i BT.2020) i den direkte capture-vej uden Vulkan-valideringsfejl; ikke testet med selve
-kortet. Visning i ægte HDR på skærmen er ikke lavet (AppImage'en bruger Qt 6.4, som ikke kan levere HDR-swapchains, og
-VeyAmux kører gennem XWayland, som ikke har HDR).
+kortet.
+
+**HDR-videofiler** (HDR10/PQ og HLG, BT.2020): swscale leverer RGBA64 (16 bit pr. kanal) og `shaders/LxHdrRgb.hlsl` laver
+samme tonemapping som capture-vejen (HLG: invers OETF + OOTF med γ = 1,2 ved 1000 nits).
+
+## HDR-output (eksperimentel)
+Menu → *HDR-output* (kræver genstart). VeyAmux beder Qt Quick om en **scRGB-swapchain** (`QSG_RHI_HDR=scrgb`,
+FP16 + `VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT`, instans-udvidelsen `VK_EXT_swapchain_colorspace`). Efter første billede
+spørger VeyAmux selv overfladen om formatet (samme test som Qt) og slår kun HDR-vejen til, hvis det findes.
+- HDR-kilder tonemappes til *skærmens top-lysstyrke* (400/600/1000/1500 nits) i stedet for 203 nits; SDR-kilder vises med
+  hvid = 203 nits (BT.2408).
+- Det færdige billede (`out8_`) gemmes PQ-kodet (8 bit med trekantet dither, `shaders/LxPqOut.hlsl`). I QML afkoder et
+  `layer.effect` på video-elementet PQ → udvidet sRGB-kodning (`shaders/qt/pq_video.frag`), og hele vinduet tegnes i et
+  FP16-lag, der omregnes til lineært scRGB (1,0 = 80 nits, SDR-hvid 203 nits) (`shaders/qt/hdr_window.frag`), så menuen ser
+  normal ud.
+- Farverne holdes inden for BT.709 (gamut-komprimering som i SDR-vejen); fuld BT.2020-farveskala er ikke lavet.
+- OBS, optagelse og skærmbilleder omregnes tilbage til SDR (`PqCodedToSdr` i `shaders/PqCode.hlsli`, blød skulder over 0,75).
+- Kræver native Wayland med HDR slået til (KDE Plasma 6 / GNOME 48+, Mesa med Wayland-farvestyring). Gennem XWayland
+  findes ingen HDR-swapchain; menuen siger det. Ukendt sammenspil med lsfg-vk (frame generation) på en HDR-swapchain.
+- Testet her kun i en software-GPU med en SDR-swapchain (`VEYAMUX_FORCE_HDR_OUT=1`): kæden, lagene og SDR-kopierne virker,
+  ingen Vulkan-valideringsfejl. Ikke testet på en ægte HDR-skærm.
+
+## Instant replay, optagelse og skærmbilleder
+**F9** gemmer de sidste 30/60/120 s, **F10** starter/stopper en optagelse, **F12** gemmer et PNG-skærmbillede
+(`~/Videos/VeyAmux`, `~/Pictures/VeyAmux`). I den direkte capture-vej konverteres det viste billede på GPU'en til NV12
+(`shaders/LxNv12.hlsl`, BT.709 limited, nedskalering til 720p/1080p/1440p) og kopieres asynkront til CPU'en med en
+VkEvent pr. slot (som OBS-kopien), så visningen ikke venter. `src/Recorder.cpp` koder med FFmpeg: `hevc_vaapi` →
+`h264_vaapi` → `libx264` (≤1440p), GOP 1 s, ingen B-billeder, tidsstempler fra capture-driverens tid (VFR, tidsbase
+1/90000); lyd tappes fra lydløkken (48 kHz, før lydstyrke, tidsstemplet efter lydforsinkelsen) og kodes til AAC.
+Pakkerne ligger i en ringbuffer (replay) og/eller skrives direkte til en fragmenteret MP4 (optagelse – kan afspilles,
+selv hvis programmet lukkes brat). Replay gemmes fra et keyframe i en baggrundstråd. Målt: A/V-synk i testfil 0 ms
+afvigelse. libva bundles ikke i AppImage'en (værtens libva finder værtens VA-driver).
+
+## GPU-tid og latens
+Vulkan-timestamps pr. trin (input, støjfjerning, kantudjævning, opskalering, finish, output) i hver frame-slot, læst når
+slotten genbruges (ingen ventetid), udglattet. Menuen viser GPU-tid, CPU-tid og "i VeyAmux" (capture-driverens
+tidsstempel → GPU-arbejde færdigt).
+
+## Profiler og lydforsinkelse
+Profiler gemmer billedindstillingerne og lydforsinkelsen under et navn (taster 1–9). Bundet til et signal
+(`WxH@fps FOURCC`) vælges profilen automatisk, når det signal åbnes. Lydforsinkelse −300…+300 ms (capture: kun positiv –
+lyden forsinkes med en forsinkelseslinje; filer: billedets tidsplan flyttes).
+
+## Opdateringer
+AppImage'en har opdateringsinfo `gh-releases-zsync|8BiTw0LF|VeyAmux|latest|VeyAmux-x86_64.AppImage.zsync`
+(`VEYAMUX_UPDATE_INFO` ved bygning). Læg både `.AppImage` og `.AppImage.zsync` op i hver GitHub-release; Gear Lever og
+AppImageUpdate henter så kun ændringerne.
 
 ## VRR-tilstand
 Et capture-kort optager altid med fast frekvens (VRR på kortet er kun HDMI-gennemføring), så et 45 fps-spil kommer som
@@ -158,10 +207,12 @@ Tryk **C** (eller kamera-ikonet). Vælg enhed, tilstand (★ = anbefalet, ≥50 
 `./VeyAmux-x86_64.AppImage --capture /dev/video0`. Kilden antages at være limited-range (typisk for HDMI-capture).
 
 ## Miljøvariabler
+`VEYAMUX_HDR_OUT=0` (slå HDR-output fra) · `VEYAMUX_REC_SOFTWARE=1` (optag med libx264) · `VEYAMUX_FSR1_RCAS=<stop>` ·
 `VEYAMUX_UI=software|vulkan` · `VEYAMUX_VSYNC=1` · `--reset-ui` · `VEYAMUX_LSFG=0` (slå lsfg-vk fra) · `VEYAMUX_DEBUG_FG=1` (logger frame generation og opskalering i den direkte capture-vej) · `VEYAMUX_NO_GPU=1` (slå Vulkan-kæden fra) · `VEYAMUX_HWDEC=0` (slå VAAPI fra) · `VEYAMUX_VAAPI_DEVICE=/dev/dri/renderD128` · `VEYAMUX_VK_DEVICE=n` · `VEYAMUX_SHADER_DIR`
 
 ## Genvejstaster
-Mellemrum afspil/pause · ←/→ ±5 s (Shift ±30 s) · ↑/↓ volumen · F fuldskærm · E forbedring til/fra · P panel · M lyd fra · O åbn
+Mellemrum afspil/pause · ←/→ ±5 s (Shift ±30 s) · ↑/↓ volumen · F fuldskærm · E forbedring til/fra · P panel · M lyd fra · O åbn ·
+C capture-kort · 1–9 profiler · F9 gem replay · F10 optag · F12 skærmbillede
 
 ## Arkitektur
 `VkContext` (Vulkan, ét universelt descriptor-layout t→0, u→16, b→32, s→48 via DXC `-fvk-*-shift`) → `EnhanceChain` →

@@ -1,5 +1,6 @@
 // VeyAmux for Linux - V4L2 capture-card input (UVC HDMI capture dongles, Elgato/AVerMedia/etc. in UVC mode).
 #pragma once
+#include <chrono>
 #include "ContentProbe.h"
 #include <cstdint>
 #include <memory>
@@ -56,6 +57,7 @@ struct RawFrame {
     std::vector<uint8_t> data;
     int w = 0, h = 0, stride = 0;     // stride in bytes
     bool repeat = false;              // same picture as the previous delivered frame (game slower than the signal)
+    std::chrono::steady_clock::time_point captured{};   // when the driver finished receiving it (V4L2 timestamp)
 };
 
 class CaptureSource {
