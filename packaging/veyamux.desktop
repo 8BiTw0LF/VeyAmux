@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=VeyAmux
+GenericName=Video Player
+Comment=GPU-enhanced video player (upscaling, anti-aliasing, sharpening)
+Exec=veyamux %F
+Icon=veyamux
+Terminal=false
+Categories=AudioVideo;Video;Player;
+MimeType=video/mp4;video/x-matroska;video/webm;video/quicktime;video/x-msvideo;video/mpeg;video/mp2t;audio/mpeg;audio/flac;audio/ogg;audio/x-wav;
+StartupWMClass=veyamux
