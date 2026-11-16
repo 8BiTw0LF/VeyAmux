@@ -82,6 +82,10 @@ class PlayerBridge : public QObject {
     Q_PROPERTY(QString language READ language NOTIFY languageChanged)
     Q_PROPERTY(QString languageChoice READ languageChoice WRITE setLanguageChoice NOTIFY languageChanged)
     Q_PROPERTY(int retroLines READ retroLines WRITE setRetroLines NOTIFY enhanceChanged)
+    // pixel-perfect scaling (EnhanceSettings::pixelPerfect); pixelDisplay = the display enlarges with sharp pixels now
+    Q_PROPERTY(bool pixelPerfect READ pixelPerfect WRITE setPixelPerfect NOTIFY enhanceChanged)
+    Q_PROPERTY(int pixelGrid READ pixelGrid WRITE setPixelGrid NOTIFY enhanceChanged)
+    Q_PROPERTY(QString pixelGridSize READ pixelGridSize NOTIFY enhanceChanged)
     // Denoise: 0 off, 1 spatial (NLM), 2 temporal, 3 both; strength 0 light, 1 medium, 2 strong
     Q_PROPERTY(int denoise READ denoise WRITE setDenoise NOTIFY enhanceChanged)
     // HDR capture (P010): brightest level of the source in nits (tone-mapped to SDR)
@@ -169,6 +173,10 @@ public:
     static QString systemLanguage();
     void setTheme(const QString& t);
     int retroLines() const { return s_.retroLines; }
+    bool pixelPerfect() const { return s_.pixelPerfect; }
+    int pixelGrid() const { return s_.pixelGrid; }
+    bool pixelDisplay() const { return s_.pixelActive(); }
+    QString pixelGridSize() const { return s_.gridW > 0 ? QStringLiteral("%1×%2").arg(s_.gridW).arg(s_.gridH) : QString(); }
     int denoise() const { return int(s_.denoise); }
     int hdrPeak() const { return int(std::lround(s_.hdrPeak)); }
     void setHdrPeak(int v) { s_.hdrPeak = float(std::clamp(v, 203, 10000)); QSettings().setValue("enh/hdrPeak", hdrPeak()); applyEnhance(); }
@@ -261,6 +269,8 @@ public:
     void setFxaa(bool v);
     void setRetroTv(bool v) { s_.retroTv = v; applyEnhance(); }
     void setRetroLines(int v) { s_.retroLines = (v == 0 || v == 240 || v == 480) ? v : 240; applyEnhance(); }
+    void setPixelPerfect(bool v) { s_.pixelPerfect = v; applyEnhance(); }
+    void setPixelGrid(int v) { s_.pixelGrid = std::clamp(v, 0, 1); applyEnhance(); }
     void setFrameGenMode(int v);
     void setFxaaQuality(int v);
     void setSharpen(double v);
@@ -418,6 +428,9 @@ private:
     std::vector<veyamux::CaptureMode> lastModes_;
     veyamux::AudioMeter meter_;
     QString theme_;
+    // measured game resolution for pixel-perfect "Measured": taken over once it has been the same for ~1.5 s
+    int gridCandW_ = 0, gridCandH_ = 0, gridStable_ = 0;
+    void updatePixelGrid();
     QVariantList bands_;
     bool audioActive_ = false;
     QVariantList audioBands() const { return bands_; }

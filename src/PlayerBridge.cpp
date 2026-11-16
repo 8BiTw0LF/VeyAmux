@@ -119,6 +119,7 @@ PlayerBridge::PlayerBridge(const QString& shaderDir, QObject* parent)
         if (rec_->recording() || rec_->streaming()) emit recTick();
         if (overlay_) updateOverlay();
         checkHighRate();
+        updatePixelGrid();
         if (!engine_.isOpen()) return;
         emit positionChanged();
         if (engine_.playing() != lastPlaying_) { lastPlaying_ = engine_.playing(); emit playingChanged(); }
@@ -493,6 +494,8 @@ void PlayerBridge::loadSettings() {
     s_.fxaa = q.value("enh/fxaa", false).toBool();
     s_.retroTv = q.value("enh/retroTv", false).toBool();
     { const int l = q.value("enh/retroLines", 240).toInt(); s_.retroLines = (l == 0 || l == 480) ? l : 240; }
+    s_.pixelPerfect = q.value("enh/pixelPerfect", false).toBool();
+    s_.pixelGrid = std::clamp(q.value("enh/pixelGrid", 0).toInt(), 0, 1);
     s_.denoise = veyamux::Denoise(std::clamp(q.value("enh/denoise", 0).toInt(), 0, 3));
     s_.denoiseStrength = std::clamp(q.value("enh/denoiseStrength", 1).toInt(), 0, 2);
     s_.hdrPeak = float(std::clamp(q.value("enh/hdrPeak", 1000).toInt(), 203, 10000));
@@ -520,6 +523,7 @@ void PlayerBridge::saveSettings() {
     QSettings q;
     q.setValue("enh/enabled", s_.enabled); q.setValue("enh/scale", double(s_.scale)); q.setValue("enh/upscaler", int(s_.upscaler));
     q.setValue("enh/retroTv", s_.retroTv); q.setValue("enh/retroLines", s_.retroLines);
+    q.setValue("enh/pixelPerfect", s_.pixelPerfect); q.setValue("enh/pixelGrid", s_.pixelGrid);
     q.setValue("enh/fxaa", s_.fxaa); q.setValue("enh/denoise", int(s_.denoise)); q.setValue("enh/denoiseStrength", s_.denoiseStrength); q.setValue("enh/hdrPeak", hdrPeak()); q.setValue("enh/vrr", s_.vrr); q.setValue("enh/frameGenMode", int(s_.frameGen)); q.setValue("enh/fxaaQuality", s_.fxaaQuality);
     q.setValue("enh/sharpen", double(s_.sharpen)); q.setValue("enh/exposure", double(s_.exposure));
     q.setValue("enh/contrast", double(s_.contrast)); q.setValue("enh/saturation", double(s_.saturation));
@@ -587,6 +591,18 @@ QString PlayerBridge::timingText(float gpu, const std::array<float, veyamux::Gpu
 // A 120 Hz capture (signal mode or a game running at ~120 fps) needs no generated frames: 2x would ask for 240 fps,
 // more than the display shows, and only adds latency and GPU load. Frame generation is paused (multiplier 1, the
 // setting itself is kept) after 1 s at >= 95 fps and resumes after 2 s below 80 fps.
+void PlayerBridge::updatePixelGrid() {
+    if (!s_.pixelActive() || s_.pixelGrid != 1 || !engine_.isOpen() || !engine_.isLive()) { gridStable_ = 0; return; }
+    const auto c = engine_.liveContent();
+    const int w = c.estW, h = c.estH;
+    if (w <= 0 || h <= 0) return;
+    if (w != gridCandW_ || h != gridCandH_) { gridCandW_ = w; gridCandH_ = h; gridStable_ = 0; return; }
+    if (++gridStable_ < 15 || (w == s_.gridW && h == s_.gridH)) return;   // 15 x 100 ms
+    s_.gridW = w;
+    s_.gridH = h;
+    applyEnhance();
+}
+
 void PlayerBridge::checkHighRate() {
     const bool live = engine_.isOpen() && engine_.isLive();
     double rate = 0;
@@ -780,6 +796,7 @@ void PlayerBridge::saveProfile(const QString& rawName, bool bindToSignal) {
     q.setValue(g + "enabled", s_.enabled); q.setValue(g + "scale", double(s_.scale)); q.setValue(g + "upscaler", int(s_.upscaler));
     q.setValue(g + "fxaa", s_.fxaa); q.setValue(g + "fxaaQuality", s_.fxaaQuality);
     q.setValue(g + "retroTv", s_.retroTv); q.setValue(g + "retroLines", s_.retroLines);
+    q.setValue(g + "pixelPerfect", s_.pixelPerfect); q.setValue(g + "pixelGrid", s_.pixelGrid);
     q.setValue(g + "denoise", int(s_.denoise)); q.setValue(g + "denoiseStrength", s_.denoiseStrength);
     q.setValue(g + "hdrPeak", hdrPeak());
     q.setValue(g + "sharpen", double(s_.sharpen)); q.setValue(g + "exposure", double(s_.exposure));
@@ -811,6 +828,8 @@ bool PlayerBridge::loadProfile(const QString& name) {
     s_.fxaaQuality = std::clamp(q.value(g + "fxaaQuality", 1).toInt(), 0, 2);
     s_.retroTv = q.value(g + "retroTv", false).toBool();
     { const int l = q.value(g + "retroLines", 240).toInt(); s_.retroLines = (l == 0 || l == 480) ? l : 240; }
+    s_.pixelPerfect = q.value(g + "pixelPerfect", false).toBool();
+    s_.pixelGrid = std::clamp(q.value(g + "pixelGrid", 0).toInt(), 0, 1);
     s_.denoise = veyamux::Denoise(std::clamp(q.value(g + "denoise", 0).toInt(), 0, 3));
     s_.denoiseStrength = std::clamp(q.value(g + "denoiseStrength", 1).toInt(), 0, 2);
     s_.hdrPeak = float(std::clamp(q.value(g + "hdrPeak", 1000).toInt(), 203, 10000));

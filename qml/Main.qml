@@ -557,6 +557,23 @@ Window {
                             current: Math.max(0, values.indexOf(player.retroLines))
                             onPicked: (i) => player.retroLines = values[i]
                         }
+                        // ---- pixel-perfect scaling (shares the Retro TV section)
+                        Item {
+                            width: parent.width; height: 30
+                            Text { font.family: Theme.font; text: t("pixelPerfect"); color: Theme.label; font.pixelSize: 17; width: parent.width - 62; elide: Text.ElideRight; anchors.verticalCenter: parent.verticalCenter }
+                            ToggleSwitch { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                                checked: player.pixelPerfect; onToggled: (v) => player.pixelPerfect = v }
+                        }
+                        Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("pixelHint") }
+                        Text { font.family: Theme.font; visible: player.pixelPerfect; text: t("pixelGrid") + (player.pixelGrid === 1 && player.pixelGridSize !== "" ? "  ·  " + player.pixelGridSize : ""); color: Theme.label; font.pixelSize: 16 }
+                        Segmented {
+                            visible: player.pixelPerfect
+                            width: parent.width
+                            model: t("pixelGridModes")
+                            current: player.pixelGrid
+                            onPicked: (i) => player.pixelGrid = i
+                        }
+                        Text { font.family: Theme.font; visible: player.pixelPerfect; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 14; color: Theme.muted; text: t("pixelGridHint") }
                     }
                 }
                 Column {
