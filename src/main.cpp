@@ -1,6 +1,7 @@
 #include "LiveVulkan.h"
 #include "LosslessScaling.h"
 #include "PlayerBridge.h"
+#include "Gamepad.h"
 #include "VideoItem.h"
 #include "VkContext.h"
 #include <algorithm>
@@ -288,7 +289,9 @@ int main(int argc, char** argv) {
     std::unique_ptr<LiveVulkan> live;       // declared before the player/engine so it is destroyed after them
     qmlRegisterType<VideoItem>("VeyAmux", 1, 0, "VideoItem");
     PlayerBridge player(findShaderDir());
+    veyamux::GamepadInput gamepad;   // controllers for the menu (Select + Start); outlives the QML engine
     QQmlApplicationEngine engine;
+    engine.rootContext()->setContextProperty("gamepad", &gamepad);
     engine.rootContext()->setContextProperty("player", &player);
     engine.rootContext()->setContextProperty("startPanel", startPanel);
     engine.rootContext()->setContextProperty("startDialog", startDialog);

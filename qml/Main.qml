@@ -294,6 +294,91 @@ Window {
         }
     }
 
+    // ------------------------------------------------------------- controller (Gamepad.h)
+    // Select + Start (or Guide held) opens / closes the menu; while it is open the controllers are kept from the game.
+    // The D-pad / left stick moves between the menu's controls (the nearest one in that direction), A presses,
+    // left/right change a slider, LB/RB jump between the columns, B closes the menu.
+    Binding { target: gamepad; property: "grabbed"; value: win.panelOpen }
+    Connections {
+        target: gamepad
+        function onMenuCombo() {
+            win.panelOpen = !win.panelOpen
+            if (win.panelOpen) { padNav.active = true; padNav.current = null; padOpenTimer.restart() }
+        }
+        function onButton(name) { if (win.panelOpen) { padNav.active = true; padNav.press(name) } }
+    }
+    // the panel fades in (160 ms) and is invisible until then, so the first control is picked once it shows
+    Timer { id: padOpenTimer; interval: 200; onTriggered: if (win.panelOpen && !padNav.current) padNav.reset() }
+    QtObject {
+        id: padNav
+        property bool active: false        // shows the highlight; mouse use hides it again
+        property Item current: null
+        // every control in the menu: clickable areas (buttons, segments, switches, list rows) and sliders
+        function collect(item, out) {
+            if (!item || !item.visible || item.opacity <= 0.01) return
+            if (item.from !== undefined && item.to !== undefined && item.neutral !== undefined && item.moved !== undefined) {
+                out.push(item); return                       // a slider (VSlider): its own mouse area is not a target
+            }
+            if (item.acceptedButtons !== undefined && item.enabled && item !== panelEater && item.width > 4 && item.height > 4
+                    && item.width < panel.width * 0.6) out.push(item)
+            for (var i = 0; i < item.children.length; ++i) collect(item.children[i], out)
+        }
+        function targets() { var o = []; collect(area, o); return o }
+        function centre(t) { var p = t.mapToItem(win.contentItem, t.width / 2, t.height / 2); return p }
+        function isSlider(t) { return t && t.neutral !== undefined && t.moved !== undefined }
+        function reset() {
+            var ts = targets(); if (ts.length === 0) { current = null; return }
+            var best = ts[0], bp = centre(best)
+            for (var i = 1; i < ts.length; ++i) { var p = centre(ts[i]); if (p.x + p.y * 3 < bp.x + bp.y * 3) { best = ts[i]; bp = p } }
+            current = best
+        }
+        function move(dx, dy) {
+            var ts = targets(); if (!current || ts.indexOf(current) < 0) { reset(); return }
+            var c = centre(current), best = null, bestScore = 1e9
+            for (var i = 0; i < ts.length; ++i) {
+                if (ts[i] === current) continue
+                var p = centre(ts[i]), vx = p.x - c.x, vy = p.y - c.y
+                var along = vx * dx + vy * dy, across = Math.abs(vx * dy - vy * dx)
+                if (along <= 2) continue                     // not in that direction
+                var score = along + across * 2.5
+                if (score < bestScore) { bestScore = score; best = ts[i] }
+            }
+            if (best) current = best
+        }
+        function column(step) {
+            var cols = [secA, secB, secC], c = current ? centre(current) : null, idx = 0
+            for (var i = 0; i < cols.length; ++i) { var r = cols[i].mapToItem(win.contentItem, 0, 0); if (c && c.x >= r.x - 10) idx = i }
+            var want = Math.max(0, Math.min(cols.length - 1, idx + step)), o = []
+            collect(cols[want], o)
+            if (o.length) { var best = o[0]; for (var j = 1; j < o.length; ++j) if (centre(o[j]).y < centre(best).y) best = o[j]; current = best }
+        }
+        function press(name) {
+            if (!current || targets().indexOf(current) < 0) reset()
+            if (name === "up") move(0, -1)
+            else if (name === "down") move(0, 1)
+            else if (name === "left") { if (isSlider(current)) current.moved(Math.max(current.from, current.value - (current.to - current.from) / 40)); else move(-1, 0) }
+            else if (name === "right") { if (isSlider(current)) current.moved(Math.min(current.to, current.value + (current.to - current.from) / 40)); else move(1, 0) }
+            else if (name === "lb") column(-1)
+            else if (name === "rb") column(1)
+            else if (name === "b") win.panelOpen = false
+            else if (name === "a" && current && !isSlider(current)) current.clicked(null)
+            Qt.callLater(function () { padRing.place() })
+        }
+    }
+    // the highlight around the selected control
+    Rectangle {
+        id: padRing
+        z: 1000
+        visible: padNav.active && win.panelOpen && padNav.current !== null
+        color: "transparent"; border.width: 3; border.color: Theme.accent; radius: 8 * Theme.round
+        function place() {
+            var t = padNav.current; if (!t) return
+            var p = t.mapToItem(win.contentItem, 0, 0), q = t.mapToItem(win.contentItem, t.width, t.height)
+            x = p.x - 4; y = p.y - 4; width = q.x - p.x + 8; height = q.y - p.y + 8
+        }
+        Connections { target: padNav; function onCurrentChanged() { padRing.place() } }
+    }
+
     // ------------------------------------------------------------- enhancement panel
     // Half the window wide, everything visible at once (no scrolling): the sections sit in three columns (two in narrow
     // windows), and if they still do not fit the height, the whole content is scaled down to fit.
@@ -314,7 +399,7 @@ Window {
         border.color: Theme.border
         // sunset line along the top edge
         Rectangle { x: 18; width: parent.width - 36; height: 2; radius: 1 * Theme.round; gradient: Theme.sunset; opacity: 0.85 }
-        MouseArea { anchors.fill: parent; hoverEnabled: true; onPositionChanged: wake() }   // keep controls awake & eat clicks
+        MouseArea { id: panelEater; anchors.fill: parent; hoverEnabled: true; onPositionChanged: { wake(); padNav.active = false } }   // keep controls awake & eat clicks
 
         component Param: Column {
             id: p
@@ -699,6 +784,15 @@ Window {
                                 checked: player.autostart; onToggled: (v) => player.autostart = v }
                         }
                         Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("autostartHint") }
+                        // controller: which one is connected, and how to open the menu with it
+                        Item {
+                            width: parent.width; height: 26
+                            Text { font.family: Theme.font; text: t("controller"); color: Theme.label; font.pixelSize: 17; anchors.verticalCenter: parent.verticalCenter }
+                            Text { font.family: Theme.font; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; width: parent.width * 0.62; horizontalAlignment: Text.AlignRight; elide: Text.ElideRight
+                                font.pixelSize: 14; color: gamepad.controllers.length > 0 ? Theme.ok : Theme.muted
+                                text: gamepad.controllers.length > 0 ? "● " + t("padOn").replace("%1", gamepad.controllers.join(", ")) : t("padNone") }
+                        }
+                        Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("padHint") }
                     }
                     Rectangle { width: parent.width; height: 1; color: Theme.line }
                     Rectangle { width: parent.width; height: 1; color: Theme.line }
