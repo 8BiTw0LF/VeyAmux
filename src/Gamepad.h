@@ -59,6 +59,13 @@ private:
     void setDir(const QString& dir, bool down);
     void applyGrab();
     bool comboHeld() const;
+    bool duplicate(const Pad& p, int key, int value);
+
+    // Steam Input (Bazzite, SteamOS) adds a virtual copy of each controller: the same press then arrives from two
+    // devices. A press already seen from another device within a few milliseconds is dropped.
+    struct Seen { QString path; qint64 ms = -1; };
+    QHash<int, Seen> seen_;              // key: event code * 4 + value (+ 1)
+    QElapsedTimer clock_;
 
     QHash<QString, Pad*> pads_;
     QSet<QString> ignored_;              // event devices that are not controllers (keyboards, mice, ...)

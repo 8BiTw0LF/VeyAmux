@@ -31,11 +31,12 @@ GamepadInput::GamepadInput(QObject* parent) : QObject(parent) {
         repeat_.setInterval(kRepeatRate);
         emit button(heldDir_);
     });
+    clock_.start();
     guideTimer_.setSingleShot(true);
     guideTimer_.setInterval(kGuideHold);
     connect(&guideTimer_, &QTimer::timeout, this, [this] { if (guide_) { comboFired_ = true; emit menuCombo(); } });
-    const QString fifo = qEnvironmentVariable("VEYAMUX_TEST_PAD_FIFO");
-    if (!fifo.isEmpty()) addPad(fifo, true);
+    // tests: one or more pipes with raw input_events (colon-separated)
+    for (const QString& fifo : qEnvironmentVariable("VEYAMUX_TEST_PAD_FIFO").split(':', Qt::SkipEmptyParts)) addPad(fifo, true);
     scan();
     scanTimer_.start();
 }
@@ -127,9 +128,11 @@ void GamepadInput::readPad(Pad& p) {
             const input_event& e = ev[i];
             if (e.type == EV_KEY) {
                 if (e.value == 2) continue;   // kernel auto-repeat: VeyAmux repeats itself
+                if (duplicate(p, e.code, e.value != 0)) continue;
                 onKey(e.code, e.value != 0);
             } else if (e.type == EV_ABS) {
                 if (e.code == ABS_HAT0X || e.code == ABS_HAT0Y) {
+                    if (duplicate(p, e.code, e.value < 0 ? -1 : e.value > 0 ? 1 : 0)) continue;
                     const bool x = e.code == ABS_HAT0X;
                     const bool neg = e.value < 0, pos = e.value > 0;
                     const int a = x ? 2 : 0;   // up/down = 0/1, left/right = 2/3
@@ -147,6 +150,14 @@ void GamepadInput::readPad(Pad& p) {
             }
         }
     }
+}
+
+bool GamepadInput::duplicate(const Pad& p, int key, int value) {
+    const qint64 now = clock_.elapsed();
+    Seen& s = seen_[key * 4 + value + 1];
+    const bool dup = s.ms >= 0 && s.path != p.path && now - s.ms < 60;
+    if (!dup) { s.path = p.path; s.ms = now; }
+    return dup;
 }
 
 bool GamepadInput::comboHeld() const { return select_ || start_ || guide_; }
