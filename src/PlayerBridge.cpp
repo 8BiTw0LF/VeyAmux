@@ -1,4 +1,5 @@
 #include "PlayerBridge.h"
+#include "Sandbox.h"
 #include "PulseDevices.h"
 #include <cstring>
 #include <QLocale>
@@ -436,14 +437,18 @@ QImage PlayerBridge::sdrCopy(QImage img) const {
 }
 
 void PlayerBridge::addToSteam() {
-    // the AppImage itself (the binary inside lives in a temporary mount)
-    const QString exe = qEnvironmentVariableIsSet("APPIMAGE") ? qEnvironmentVariable("APPIMAGE") : QCoreApplication::applicationFilePath();
+    // the AppImage itself (the binary inside lives in a temporary mount), or `flatpak run <id>`
+    const auto run = veyamux::sandbox::launcher();
     const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
     QDir().mkpath(dir);
     const QString icon = dir + "/veyamux-steam.png";
     QIcon(":/qml/icons/logo.svg").pixmap(512, 512).save(icon, "PNG");
-    const auto r = veyamux::steam::addShortcut(exe, icon, "--fullscreen --capture last");
-    if (r.ok) showNotice(L("Added to Steam: start VeyAmux from your library or Game Mode", "Tilføjet til Steam: start VeyAmux fra biblioteket eller Game Mode"));
+    const QString opts = (run.args + QStringList{"--fullscreen", "--capture", "last"}).join(' ');
+    const auto r = veyamux::steam::addShortcut(run.program, icon, opts);
+    if (r.ok && veyamux::sandbox::flatpak())
+        // a Flatpak cannot see whether Steam is running; Steam rewrites its shortcut list when it closes
+        showNotice(L("Added to Steam: if Steam was open, close it and press the button again", "Tilføjet til Steam: hvis Steam var åben, så luk den og tryk på knappen igen"));
+    else if (r.ok) showNotice(L("Added to Steam: start VeyAmux from your library or Game Mode", "Tilføjet til Steam: start VeyAmux fra biblioteket eller Game Mode"));
     else if (r.message == "Close Steam first") showNotice(L("Close Steam first, then press the button again", "Luk Steam først, og tryk så på knappen igen"));
     else showNotice(L("Could not add to Steam: ", "Kunne ikke tilføje til Steam: ") + r.message);
 }
@@ -984,9 +989,8 @@ QString PlayerBridge::lastCaptureDevice() const {
 }
 
 void PlayerBridge::setAutostart(bool on) {
-    const QString exe = qEnvironmentVariableIsSet("APPIMAGE") ? qEnvironmentVariable("APPIMAGE") : QCoreApplication::applicationFilePath();
     QString err;
-    if (!veyamux::watch::setAutostart(on, exe, err)) showNotice(err);
+    if (!veyamux::watch::setAutostart(on, err)) showNotice(err);
     else if (on && QSettings().value("cap/name").toString().isEmpty())
         showNotice(L("Open the capture card once, so VeyAmux knows which card to wait for", "Åbn capture-kortet én gang, så VeyAmux ved, hvilket kort den skal vente på"));
     emit recChanged();
@@ -1085,6 +1089,8 @@ void PlayerBridge::chooseLsfgFolder() {
     QSettings().setValue("lsfg/folder", dir);
     refreshLsfg();
 }
+
+bool PlayerBridge::flatpak() const { return veyamux::sandbox::flatpak(); }
 
 QString PlayerBridge::lsfgState() const {
     if (lsfgCrashed_) return "crashed";

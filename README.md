@@ -89,6 +89,10 @@ needed for its own frame generation**, and everything else works without it:
 - **Retro TV**: turns the picture into an old CRT television, with a slightly curved glass screen, rounded corners,
   visible scanlines and red-green-blue phosphor stripes. This is CRT-Geom with the same settings as ShaderGlass'
   `crt-geom` preset. Choose 240 lines (old consoles), 480 lines (PS2 / GameCube era) or the source's own lines.
+- **Pixel-perfect scaling** (under Retro TV): the picture is enlarged by a whole number with sharp, square pixels, the
+  way emulators do it, instead of being stretched soft. With *Game pixels* (*Auto*, 240p or 480p) VeyAmux first finds the
+  retro game's own pixel grid inside the capture signal (a 320×240 game in a 1080p signal), so every game pixel becomes
+  an exact, even block on screen.
 
 <p align="center">
   <img src="docs/images/retro-tv.png" width="800" alt="The same picture without and with Retro TV: curved glass, rounded corners and scanlines">
@@ -141,13 +145,18 @@ needed for its own frame generation**, and everything else works without it:
   and Bazzite's Game Mode.
 - **Start when the capture card is plugged in**: a small background helper opens VeyAmux fullscreen as soon as the card
   appears.
+- **Game controller in the menu**: hold **Select + Start** (or the **Guide / PS** button for half a second) to open and
+  close the menu. While it is open, the controller only steers the menu (the game gets nothing): the D-pad or left
+  stick moves, **A** chooses, left/right change a slider, **LB / RB** jump between the columns and **B** closes. Xbox,
+  PlayStation, Switch and most other controllers work.
 - **Updates through Gear Lever / AppImageUpdate** (only the changed parts are downloaded).
 - **Four themes**, chosen on the start screen, and the logo changes with them:
   - **Vice**: violet with a pink-to-orange sunset gradient.
   - **Code**: black with terminal green and monospace text.
   - **Inferno**: near-black with blood red, ember orange and classical capitals.
   - **Retro**: 8-bit console greys and red, square buttons with a hard edge, and a pixel font.
-- **English and Danish**, chosen automatically. The whole menu is visible at once, with no scrolling.
+- **Eight languages**: English, Danish, German, Spanish, French, Swedish, Norwegian (Bokmål) and Russian, chosen from
+  the system or on the start screen. The whole menu is visible at once, with no scrolling.
 
 ## Latency
 
@@ -178,6 +187,9 @@ The AppImage contains everything it needs (Qt, FFmpeg, shaders), and nothing is 
 missing, use `APPIMAGE_EXTRACT_AND_RUN=1 ./VeyAmux-x86_64.AppImage`.
 
 Press **C** (or **Capture**) to choose a capture card, window or screen. Press **P** (or ✨) for the menu.
+
+**Flatpak:** VeyAmux is on its way to **Flathub**. In the Flatpak version, lsfg-vk (step 3) is installed as a Flatpak
+extension instead: `flatpak install flathub org.freedesktop.Platform.VulkanLayer.lsfgvk//25.08`.
 
 ### 2. Lossless Scaling (only for its frame generation)
 
@@ -236,6 +248,9 @@ display. Turn VRR / adaptive sync off for VeyAmux.
 **Space** play/pause · **←/→** ±5 s (Shift ±30 s) · **↑/↓** volume · **F** fullscreen · **E** enhancement on/off ·
 **P** menu · **M** mute (your speakers only) · **O** open file · **C** capture · **F3** frame-time overlay ·
 **1–9** profiles · **F9** save replay · **F10** record · **F12** screenshot
+
+**Controller:** **Select + Start** (or hold **Guide**) menu · **D-pad / stick** move · **A** choose · **B** close ·
+**LB / RB** columns
 
 ## Command line
 

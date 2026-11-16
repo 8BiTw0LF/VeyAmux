@@ -1,0 +1,49 @@
+# Test build of the Flatpak (the same manifest that goes to Flathub, with the local source): every push to main and
+# by hand. The result, VeyAmux.flatpak, is kept as a workflow artifact (Actions tab) and installs with
+#   flatpak install --user VeyAmux.flatpak
+name: Flatpak
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  SRC: .          # folder with CMakeLists.txt / packaging (linux in the Veyra fork)
+
+jobs:
+  flatpak:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install flatpak-builder
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends flatpak flatpak-builder appstream desktop-file-utils
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+
+      - name: Check the metadata
+        working-directory: ${{ env.SRC }}
+        run: |
+          appstreamcli validate --no-net packaging/flatpak/io.github._8BiTw0LF.VeyAmux.metainfo.xml
+          desktop-file-validate packaging/veyamux.desktop
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.SRC }}/.flatpak-builder
+          key: flatpak-builder-${{ hashFiles('**/io.github._8BiTw0LF.VeyAmux.yml') }}
+
+      - name: Build
+        working-directory: ${{ env.SRC }}
+        run: |
+          flatpak-builder --user --install-deps-from=flathub --force-clean --repo=repo-flatpak \
+            build-flatpak packaging/flatpak/io.github._8BiTw0LF.VeyAmux.yml
+          flatpak build-bundle --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo \
+            repo-flatpak VeyAmux.flatpak io.github._8BiTw0LF.VeyAmux
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VeyAmux.flatpak
+          path: ${{ env.SRC }}/VeyAmux.flatpak

@@ -15,6 +15,27 @@ sudo apt install cmake ninja-build g++ pkg-config patchelf file python3 glslang-
 ```
 `scripts/fetch-tools.sh` henter DXC, linuxdeploy og appimagetool automatisk. Kør AppImage uden FUSE: `APPIMAGE_EXTRACT_AND_RUN=1`.
 
+## Flatpak (Flathub)
+Manifest: `packaging/flatpak/io.github._8BiTw0LF.VeyAmux.yml` (KDE-runtime 6.11 = freedesktop 25.08). App-id'et har `_`
+foran `8BiTw0LF`, fordi en del af et Flatpak-id ikke må starte med et tal.
+- **Bygges med:** FFmpeg 9 (VAAPI, x264, GnuTLS til RTMPS) og x264 som moduler. DXC er Microsofts færdige Linux-udgave og
+  bruges kun under bygningen (fjernes bagefter), derfor kun x86_64 (`flathub.json`).
+- **Lokalt:** `flatpak run org.flatpak.Builder --user --install --install-deps-from=flathub --force-clean build-flatpak
+  packaging/flatpak/io.github._8BiTw0LF.VeyAmux.yml`. GitHub Actions (`.github/workflows/flatpak.yml`) bygger den samme
+  ved hvert push til main og gemmer `VeyAmux.flatpak` som artefakt.
+- **Til Flathub:** `scripts/make-flathub-manifest.sh <tag>` skriver `dist/flathub/` med VeyAmux fra et udgivet tag
+  (Flathub bygger kun fra faste kilder) og `flathub.json`.
+- **Rettigheder:** `--device=all` (capture-kort og controllere), Wayland + X11 (XWayland-fallback), PulseAudio, netværk
+  (RTMP og OBS-browserkilden), `xdg-videos`/`xdg-pictures` (optagelser), Steams `userdata` (*Tilføj til Steam*) og
+  `Lossless Scaling`-mappen (læses), `xdg-config/autostart` (start når kortet tilsluttes).
+- **Forskelle i koden** (`src/Sandbox.h`): Steam-genvejen og autostart-filen starter `flatpak run --command=veyamux <id>`.
+  Autostart-filen skrives i den rigtige `~/.config/autostart`. En Flatpak kan ikke se, om Steam kører, så brugeren bedes
+  i stedet genstarte Steam.
+- **lsfg-vk** kan ikke bruges fra værtens `~/.local`. Det kommer som Flatpak-udvidelsen
+  `org.freedesktop.Platform.VulkanLayer.lsfgvk//25.08`, som runtime'en monterer under `/usr/lib/extensions/vulkan`.
+  `XDG_DATA_DIRS` får den mappe med, så både Vulkan-loaderen og VeyAmux' egen søgning finder lageret. Menuen viser
+  installationskommandoen, når laget mangler.
+
 ## Hvad er med
 | Område | Status |
 |---|---|
@@ -149,6 +170,36 @@ Forskelle fra originalen (billedet er det samme):
 - **Billedlinjer:** crt-geom's `ysize` er 240, 480 eller kildens egne. Et capture-kort leverer 240p skaleret op til 1080p,
   så hver simuleret linje tager gennemsnittet af de kilderækker, den dækker (op til 8), i stedet for at plukke én.
 - **Maske:** kun maske 1 er med.
+
+## Pixel-perfekt skalering
+Under Retro TV. To dele:
+- **Visning** (`VideoItem`): billedet forstørres med et helt tal `k = floor(min(vinduesbredde/b, vindueshøjde/h))` med
+  nearest-neighbour, centreret og lagt på hele skærmpixels. Uden det tegnes det med lineær filtrering.
+- **Spilpixels** (`shaders/LxPixelGrid.hlsl`): finder spillets eget gitter i signalet. Hver gitterpixel er gennemsnittet
+  af den inderste halvdel af de kildepixels, den dækker (`max(skala·0,25; 0,5)` til hver side), så de bløde kanter, en
+  opskalerer efterlader mellem spilpixels, ikke smitter af.
+  - *240p* og *480p* er faste gitre. *Auto* bruger spillets målte opløsning (samme måling som infolinjen) og skifter
+    først, når den har været stabil i 1,5 s.
+  - Skarphed springes over, mens pixel-perfekt er aktiv.
+
+## Controller
+`src/Gamepad.cpp` læser controllere direkte fra kernen (evdev, `/dev/input/event*`). Xbox-, PlayStation-, Switch- og
+HID-driverne melder de samme standardkoder:
+- `BTN_SOUTH` = A/kryds og `BTN_EAST` = B/cirkel.
+- D-pad som `BTN_DPAD_*` eller `ABS_HAT0X/Y`, venstre stik som `ABS_X/Y` (tærskel 60 %).
+
+Menuen styres sådan:
+- **Åbn og luk:** Select + Start, eller Guide holdt i 500 ms.
+- **Spillet får intet**, mens menuen er åben: alle controllere grabbes med `EVIOCGRAB`. Grab'et starter først, når de
+  knapper, der åbnede menuen, er sluppet, og slippes først, når lukkeknapperne er sluppet, så spillet aldrig ser en
+  knap, der hænger.
+- **Retninger gentages:** første gang efter 380 ms, derefter hver 110 ms.
+- **Navigation i QML** (`padNav` i `Main.qml`): alle synlige `MouseArea`s og skydere i panelet samles. Den nærmeste i den
+  valgte retning vælges efter `afstand + 2,5 · sideafvigelse`.
+  - LB/RB springer mellem kolonnerne, og venstre/højre flytter en skyder 1/40 af dens område.
+  - Musebevægelse skjuler markeringen igen.
+
+Test uden controller: `VEYAMUX_TEST_PAD_FIFO=<fifo>` læser rå `input_event`-strukturer fra en pipe.
 
 ## Frame generation
 Menu → *Frame generation*:
@@ -305,7 +356,15 @@ når det præsenteres. Kræver *Adaptiv synkronisering* i KDE's skærmindstillin
 kombineres med Lossless Scaling (lsfg-vk kræver fast skærmfrekvens).
 
 ## Sprog
-Engelsk som standard; dansk automatisk når sprog **eller** region er dansk (`da_DK`, `en_DK`, dansk `LC_TIME` …).
+Engelsk, dansk, tysk, spansk, fransk, svensk, norsk (bokmål) og russisk.
+- **Automatisk:** sproget tages fra `LANGUAGE`, `LC_ALL`, `LC_MESSAGES` og `LANG` (`no`/`nn` → bokmål). Dansk vælges
+  stadig også, når kun regionen er dansk.
+- **På startskærmen:** sproget kan vælges, og valget gemmes som `ui/lang`.
+
+Hvor teksterne ligger:
+- **Brugerfladen:** `qml/Strings.js`.
+- **Beskeder fra C++:** `i18n/messages.json`, slået op på den engelske tekst.
+- **Manglende oversættelser** vises på engelsk.
 
 ## Lav latens (capture)
 Samme princip som Windows-versionen: billedet forlader aldrig GPU'en. Rå YUYV/UYVY/NV12-frames uploades, farvekonverteres og

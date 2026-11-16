@@ -16,7 +16,9 @@ processing design are reused, and VeyAmux is distributed under the same GPL-3.0 
 | FidelityFX_SC header format | `third_party/ffx_tools/ffx_sc_linux.py` | MIT (AMD) | Independent Python re-implementation of the GLSL path of the SDK's shader compiler tool. |
 | Qt 6 (incl. Qt Network for the local OBS stream), FFmpeg, PulseAudio client, libva | bundled in the AppImage by linuxdeploy | LGPL-3.0 / LGPL-2.1+ | Unmodified distribution packages. |
 | Microsoft DirectXShaderCompiler | build tool only | University of Illinois/NCSA | Not shipped. |
+| FFmpeg 9 (built with x264, so the FFmpeg libraries are GPL-2.0-or-later) and x264 | Flatpak build only (`packaging/flatpak`), built from source | GPL-2.0-or-later | https://ffmpeg.org (release tarball) and https://code.videolan.org/videolan/x264 (commit in the manifest), unmodified. |
 
 Not included: **lsfg-vk** (CC BY-NC-ND 4.0) and **Lossless Scaling** (commercial, Steam). VeyAmux only detects a copy the user
-installed and enables it for its own window through lsfg-vk's documented environment variables; no code, shaders or DLLs
+installed (in the Flatpak: the separately installed Flathub extension `org.freedesktop.Platform.VulkanLayer.lsfgvk`)
+and enables it for its own window through lsfg-vk's documented environment variables; no code, shaders or DLLs
 from either are copied, translated or redistributed.

@@ -11,6 +11,7 @@
 #include <QFileInfo>
 #include <QLocale>
 #include <QProcess>
+#include "Sandbox.h"
 #include "Watcher.h"
 #include <cstring>
 #include <QQmlApplicationEngine>
@@ -129,7 +130,7 @@ int main(int argc, char** argv) {
     }
     QApplication app(argc, argv);
     QGuiApplication::setApplicationDisplayName("VeyAmux");
-    QGuiApplication::setDesktopFileName("veyamux");
+    QGuiApplication::setDesktopFileName(veyamux::sandbox::flatpak() ? veyamux::sandbox::flatpakId() : QStringLiteral("veyamux"));
 
     QString openFile, grabPath, capturePath;
     bool startPanel = false, startDialog = false;
