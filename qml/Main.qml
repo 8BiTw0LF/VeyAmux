@@ -12,6 +12,9 @@ Window {
     color: Theme.bg
     title: player.hasMedia ? player.title + " — VeyAmux" : "VeyAmux"
 
+    // the theme (Theme.qml) follows the saved choice
+    Binding { target: Theme; property: "name"; value: player.theme }
+
     readonly property bool fs: visibility === Window.FullScreen
     property bool panelOpen: startPanel
     property bool controlsShown: true
@@ -37,7 +40,7 @@ Window {
               denoiseHint1: "Non-local means: averages each pixel with similar-looking pixels nearby. Frame by frame, never smears motion; strong settings soften fine texture a little.",
               denoiseHint2: "Averages each pixel over several frames along the measured motion: keeps the most detail. Fast, unpredictable motion falls back to the current frame.",
               denoiseHint3: "Temporal first, then a gentle spatial pass: the cleanest picture. Pick the level after how noisy the source is.",
-              reset: "Reset", gpu: "GPU", cpuOnly: "No GPU — passthrough", hint: "Space play/pause · ←/→ seek · F fullscreen · E enhance · M mute · C capture",
+              reset: "Reset", gpu: "GPU", cpuOnly: "No GPU — passthrough", hint: "Space play/pause · ←/→ seek · F fullscreen · E enhance · M mute · C capture", theme: "Theme",
               native: "Native",
               method: "Method", lanczos: "Lanczos", fsr31: "AMD FSR 3.1",
               lanczosHint: "Sharp classic scaling, frame by frame. No added latency.",
@@ -109,12 +112,12 @@ Window {
               audioIn: "Lyd fra kilden", audioInOn: "● Der kommer lyd", audioInNone: "Ingen lyd", audioInMuted: "● Kommer ind (slået fra)",
               audioInHint: "Viser kildens egen lyd. Slå lyd fra (M) og lydstyrken gælder kun dine højttalere: optagelser, replays og livestreamen får altid lyden med.",
               audioDelay: "Lydforsinkelse (ms)", audioDelayHint: "Positiv = lyden senere. Brug den, når billedet halter efter lyden (fx med Lossless Scaling). Ved capture-kort kan lyden kun forsinkes.",
-              denoise: "Støjfjerning", denoiseModes: ["Fra", "Rumlig", "Temporal", "Begge"], denoiseLevels: ["Let", "Middel", "Kraftig"],
+              denoise: "Støjreduktion", denoiseModes: ["Fra", "Rumlig", "Temporal", "Begge"], denoiseLevels: ["Let", "Middel", "Kraftig"],
               denoiseHint0: "Fjerner korn, dithering og komprimeringsstøj før opskalering og skarphed, så Skarphed kan skrues op uden at gøre støjen skarp.",
               denoiseHint1: "Non-local means: blander hver pixel med pixels i nærheden, der ligner den. Billede for billede, slører aldrig bevægelse; kraftig gør fin tekstur en anelse blødere.",
               denoiseHint2: "Midler hver pixel over flere billeder langs den målte bevægelse: bevarer flest detaljer. Ved hurtig, uforudsigelig bevægelse bruges det aktuelle billede.",
               denoiseHint3: "Først temporal, så en mild rumlig: det reneste billede. Vælg niveau efter hvor støjfyldt kilden er.",
-              reset: "Nulstil", gpu: "GPU", cpuOnly: "Ingen GPU — uden forbedring", hint: "Mellemrum afspil/pause · ←/→ spol · F fuldskærm · E forbedring · M lyd fra · C capture",
+              reset: "Nulstil", gpu: "GPU", cpuOnly: "Ingen GPU — uden forbedring", hint: "Mellemrum afspil/pause · ←/→ spol · F fuldskærm · E forbedring · M lyd fra · C capture", theme: "Tema",
               native: "Original",
               method: "Metode", lanczos: "Lanczos", fsr31: "AMD FSR 3.1",
               lanczosHint: "Skarp klassisk skalering, billede for billede. Ingen ekstra forsinkelse.",
@@ -211,24 +214,59 @@ Window {
         visible: !player.hasMedia
         anchors.centerIn: parent
         spacing: 18
-        Image { anchors.horizontalCenter: parent.horizontalCenter; source: "icons/logo.svg"; sourceSize: Qt.size(112, 112); width: 112; height: 112; smooth: true }
-        Text { anchors.horizontalCenter: parent.horizontalCenter; text: "VeyAmux"; color: Theme.heading; font.pixelSize: 54; font.weight: Font.DemiBold; font.letterSpacing: 2 }
-        Text { anchors.horizontalCenter: parent.horizontalCenter; text: t("drop"); color: Theme.label; font.pixelSize: 16 }
+        Image { anchors.horizontalCenter: parent.horizontalCenter; source: Theme.logo; sourceSize: Qt.size(112, 112); width: 112; height: 112; smooth: true }
+        Text { font.family: Theme.headFont; font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase; anchors.horizontalCenter: parent.horizontalCenter; text: "VeyAmux"; color: Theme.heading; font.pixelSize: 54 * Theme.headScale; font.weight: Font.DemiBold; font.letterSpacing: 2 }
+        Text { font.family: Theme.font; anchors.horizontalCenter: parent.horizontalCenter; text: t("drop"); color: Theme.label; font.pixelSize: 16 }
         Row {
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: 12
             Rectangle {
-                width: 170; height: 46; radius: 23; gradient: openMa.containsMouse ? Theme.sunsetHover : Theme.sunset
-                Text { anchors.centerIn: parent; text: t("open"); color: Theme.accentInk; font.pixelSize: 15; font.weight: Font.DemiBold }
+                width: 170; height: 46; radius: 23 * Theme.round; gradient: openMa.containsMouse ? Theme.sunsetHover : Theme.sunset
+                border.width: Theme.edge; border.color: "#000000"
+                Rectangle { visible: Theme.edge > 0; x: 2; y: parent.height - 6; width: parent.width - 4; height: 4; color: "#59000000" }
+                Text { font.family: Theme.headCaps ? Theme.headFont : Theme.font; anchors.centerIn: parent; text: t("open"); color: Theme.accentInk
+                    font.pixelSize: Theme.headCaps ? 12 : 15; font.weight: Font.DemiBold; font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase }
                 MouseArea { id: openMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: player.openDialog() }
             }
             Rectangle {
-                width: 160; height: 44; radius: 22; color: capMa.containsMouse ? Theme.surfaceHover : Theme.surface; border.color: Theme.border
-                Text { anchors.centerIn: parent; text: t("capture"); color: Theme.text; font.pixelSize: 15; font.weight: Font.DemiBold }
+                width: 160; height: 44; radius: 22 * Theme.round; color: capMa.containsMouse ? Theme.surfaceHover : Theme.surface; border.color: Theme.border
+                border.width: Math.max(1, Theme.edge)
+                Rectangle { visible: Theme.edge > 0; x: 2; y: parent.height - 6; width: parent.width - 4; height: 4; color: "#59000000" }
+                Text { font.family: Theme.headCaps ? Theme.headFont : Theme.font; anchors.centerIn: parent; text: t("capture"); color: Theme.text
+                    font.pixelSize: Theme.headCaps ? 12 : 15; font.weight: Font.DemiBold; font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase }
                 MouseArea { id: capMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: capDlg.openDialog() }
             }
         }
-        Text { anchors.horizontalCenter: parent.horizontalCenter; text: t("hint"); color: Theme.muted; font.pixelSize: 14 }
+        Text { font.family: Theme.font; anchors.horizontalCenter: parent.horizontalCenter; text: t("hint"); color: Theme.muted; font.pixelSize: 14 }
+        // theme picker: each chip shows the theme's own colours and logo
+        Item { width: 1; height: 10 }
+        Text { font.family: Theme.font; anchors.horizontalCenter: parent.horizontalCenter; text: t("theme"); color: Theme.label; font.pixelSize: 13 }
+        Row {
+            anchors.horizontalCenter: parent.horizontalCenter
+            spacing: 10
+            Repeater {
+                model: Theme.names
+                delegate: Rectangle {
+                    required property string modelData
+                    readonly property var pal: Theme.palettes[modelData]
+                    readonly property bool sel: Theme.name === modelData
+                    width: 128; height: 44; radius: 12 * Theme.round
+                    color: pal.surface
+                    border.width: sel ? 2 : 1
+                    border.color: sel ? pal.accent : (thMa.containsMouse ? pal.accentLine : Theme.border)
+                    Row {
+                        anchors.centerIn: parent
+                        spacing: 8
+                        Image { source: "icons/logo-" + modelData + ".svg"; sourceSize: Qt.size(26, 26); width: 26; height: 26; anchors.verticalCenter: parent.verticalCenter }
+                        Text { font.family: Theme.font; text: pal.title; color: pal.text; font.pixelSize: 14; font.weight: sel ? Font.DemiBold : Font.Medium; anchors.verticalCenter: parent.verticalCenter }
+                    }
+                    Rectangle { anchors { left: parent.left; right: parent.right; bottom: parent.bottom; margins: 6 } height: 3; radius: 1.5 * Theme.round
+                        gradient: Gradient { orientation: Gradient.Horizontal
+                            GradientStop { position: 0; color: pal.g0 } GradientStop { position: 1; color: pal.g1 } } }
+                    MouseArea { id: thMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: player.theme = modelData }
+                }
+            }
+        }
     }
 
     // Click / hover / double-click on the video
@@ -252,18 +290,18 @@ Window {
     Rectangle {
         visible: player.status !== ""
         anchors { top: parent.top; horizontalCenter: parent.horizontalCenter; topMargin: 18 }
-        width: Math.min(parent.width - 40, toastText.implicitWidth + 32); height: 36; radius: 18; color: player.hdrOutputActive ? Qt.rgba(Theme.toast.r, Theme.toast.g, Theme.toast.b, 1) : Theme.toast
+        width: Math.min(parent.width - 40, toastText.implicitWidth + 32); height: 36; radius: 18 * Theme.round; color: player.hdrOutputActive ? Qt.rgba(Theme.toast.r, Theme.toast.g, Theme.toast.b, 1) : Theme.toast
         border.color: Theme.accentLine
-        Text { id: toastText; anchors.centerIn: parent; text: player.status; color: Theme.warn; font.pixelSize: 13; elide: Text.ElideRight; width: parent.width - 28; horizontalAlignment: Text.AlignHCenter }
+        Text { font.family: Theme.font; id: toastText; anchors.centerIn: parent; text: player.status; color: Theme.warn; font.pixelSize: 13; elide: Text.ElideRight; width: parent.width - 28; horizontalAlignment: Text.AlignHCenter }
     }
 
     // short confirmations (profile loaded, clip or screenshot saved)
     Rectangle {
         visible: player.notice !== "" && player.status === ""
         anchors { top: parent.top; horizontalCenter: parent.horizontalCenter; topMargin: 18 }
-        width: Math.min(parent.width - 40, noticeText.implicitWidth + 32); height: 36; radius: 18; color: player.hdrOutputActive ? Qt.rgba(Theme.toast.r, Theme.toast.g, Theme.toast.b, 1) : Theme.toast
+        width: Math.min(parent.width - 40, noticeText.implicitWidth + 32); height: 36; radius: 18 * Theme.round; color: player.hdrOutputActive ? Qt.rgba(Theme.toast.r, Theme.toast.g, Theme.toast.b, 1) : Theme.toast
         border.color: Theme.okLine
-        Text { id: noticeText; anchors.centerIn: parent; text: player.notice; color: Theme.ok; font.pixelSize: 13; elide: Text.ElideRight; width: parent.width - 28; horizontalAlignment: Text.AlignHCenter }
+        Text { font.family: Theme.font; id: noticeText; anchors.centerIn: parent; text: player.notice; color: Theme.ok; font.pixelSize: 13; elide: Text.ElideRight; width: parent.width - 28; horizontalAlignment: Text.AlignHCenter }
     }
 
     // frame-time overlay (F3)
@@ -272,8 +310,8 @@ Window {
         visible: player.overlay
         z: 6
         anchors { left: parent.left; bottom: parent.bottom; leftMargin: 16; bottomMargin: 90 }
-        width: 440; height: ftCol.implicitHeight + 16; radius: 10
-        color: player.hdrOutputActive ? "#0d0716" : "#c80d0716"; border.color: Theme.border
+        width: 440; height: ftCol.implicitHeight + 16; radius: 10 * Theme.round
+        color: player.hdrOutputActive ? Theme.bg : Theme.overlay; border.color: Theme.border
         Column {
             id: ftCol
             x: 8; y: 8; width: parent.width - 16; spacing: 6
@@ -295,7 +333,7 @@ Window {
                         ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
                     }
                     if (n < 2) return;
-                    ctx.strokeStyle = "#ff3d8e"; ctx.lineWidth = 1.5;
+                    ctx.strokeStyle = Theme.accent; ctx.lineWidth = 1.5;
                     ctx.beginPath();
                     for (let i = 0; i < n; ++i) {
                         const x = i * width / (n - 1);
@@ -306,7 +344,7 @@ Window {
                 }
                 Connections { target: player; function onOverlayTick() { ftCanvas.requestPaint() } }
             }
-            Text { text: t("overlayHint"); color: Theme.dim; font.pixelSize: 11 }
+            Text { font.family: Theme.font; text: t("overlayHint"); color: Theme.dim; font.pixelSize: 11 }
         }
     }
 
@@ -315,10 +353,10 @@ Window {
         visible: player.recording || player.streaming
         anchors { top: parent.top; right: parent.right; topMargin: 14; rightMargin: 16 }
         spacing: 6; z: 5
-        Rectangle { width: 10; height: 10; radius: 5; color: "#ff4040"; anchors.verticalCenter: parent.verticalCenter
+        Rectangle { width: 10; height: 10; radius: 5 * Theme.round; color: "#ff4040"; anchors.verticalCenter: parent.verticalCenter
             SequentialAnimation on opacity { running: player.recording || player.streaming; loops: Animation.Infinite
                 NumberAnimation { to: 0.3; duration: 700 } NumberAnimation { to: 1; duration: 700 } } }
-        Text { text: player.streaming ? (player.recording ? "LIVE · REC" : "LIVE") : "REC"; color: "#ffdddd"; font.pixelSize: 11; font.weight: Font.Bold; font.letterSpacing: 1 }
+        Text { font.family: Theme.font; text: player.streaming ? (player.recording ? "LIVE · REC" : "LIVE") : "REC"; color: "#ffdddd"; font.pixelSize: 11; font.weight: Font.Bold; font.letterSpacing: 1 }
     }
 
     // ------------------------------------------------------------- title (top)
@@ -330,8 +368,8 @@ Window {
         opacity: controlsShown ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: 200 } }
         gradient: Gradient { GradientStop { position: 0; color: "#b0000000" } GradientStop { position: 1; color: "#00000000" } }
-        Text { x: 22; y: 18; width: parent.width - 44; text: player.title; color: Theme.heading; font.pixelSize: 16; font.weight: Font.Medium; elide: Text.ElideRight }
-        Text { x: 22; y: 40; text: player.mediaInfo; color: Theme.label; font.pixelSize: 12 }
+        Text { font.family: Theme.font; x: 22; y: 18; width: parent.width - 44; text: player.title; color: Theme.heading; font.pixelSize: 16; font.weight: Font.Medium; elide: Text.ElideRight }
+        Text { font.family: Theme.font; x: 22; y: 40; text: player.mediaInfo; color: Theme.label; font.pixelSize: 12 }
     }
 
     // ------------------------------------------------------------- bottom controls
@@ -350,7 +388,7 @@ Window {
             visible: player.duration > 0
             anchors { left: parent.left; right: parent.right; bottom: controlsRow.top; leftMargin: 22; rightMargin: 22; bottomMargin: 4 }
             height: 22
-            Text { id: tCur; anchors.verticalCenter: parent.verticalCenter; text: fmt(scrubbing ? scrubValue : player.position); color: Theme.text; font.pixelSize: 12; width: 52 }
+            Text { font.family: Theme.font; id: tCur; anchors.verticalCenter: parent.verticalCenter; text: fmt(scrubbing ? scrubValue : player.position); color: Theme.text; font.pixelSize: 12; width: 52 }
             VSlider {
                 anchors { left: tCur.right; right: tDur.left; verticalCenter: parent.verticalCenter; leftMargin: 6; rightMargin: 6 }
                 from: 0; to: Math.max(player.duration, 0.001)
@@ -358,14 +396,14 @@ Window {
                 onDraggingChanged: { if (dragging) { win.scrubbing = true } else { win.scrubbing = false; player.seek(win.scrubValue) } }
                 onMoved: (v) => { win.scrubValue = v; wake() }
             }
-            Text { id: tDur; anchors { right: parent.right; verticalCenter: parent.verticalCenter } text: fmt(player.duration); color: Theme.label; font.pixelSize: 12; width: 52; horizontalAlignment: Text.AlignRight }
+            Text { font.family: Theme.font; id: tDur; anchors { right: parent.right; verticalCenter: parent.verticalCenter } text: fmt(player.duration); color: Theme.label; font.pixelSize: 12; width: 52; horizontalAlignment: Text.AlignRight }
         }
 
         Rectangle {
             visible: player.live
             anchors { left: parent.left; bottom: controlsRow.top; leftMargin: 22; bottomMargin: 10 }
-            width: 58; height: 22; radius: 11; color: Theme.live
-            Text { anchors.centerIn: parent; text: t("live"); color: Theme.heading; font.pixelSize: 11; font.weight: Font.Bold; font.letterSpacing: 1 }
+            width: 58; height: 22; radius: 11 * Theme.round; color: Theme.live
+            Text { font.family: Theme.font; anchors.centerIn: parent; text: t("live"); color: Theme.heading; font.pixelSize: 11; font.weight: Font.Bold; font.letterSpacing: 1 }
         }
         Row {
             id: controlsRow
@@ -401,13 +439,13 @@ Window {
         opacity: panelOpen ? 1 : 0
         visible: opacity > 0
         Behavior on opacity { NumberAnimation { duration: 160 } }
-        radius: 18
+        radius: 18 * Theme.round
         // HDR output: fully opaque. Bright HDR video behind a 95 % panel shines through several times stronger than in
         // SDR (up to ~7x SDR white) and greys out the menu.
         color: player.hdrOutputActive ? Qt.rgba(Theme.panel.r, Theme.panel.g, Theme.panel.b, 1) : Theme.panel
         border.color: Theme.border
         // sunset line along the top edge
-        Rectangle { x: 18; width: parent.width - 36; height: 2; radius: 1; gradient: Theme.sunset; opacity: 0.85 }
+        Rectangle { x: 18; width: parent.width - 36; height: 2; radius: 1 * Theme.round; gradient: Theme.sunset; opacity: 0.85 }
         MouseArea { anchors.fill: parent; hoverEnabled: true; onPositionChanged: wake() }   // keep controls awake & eat clicks
 
         component Param: Column {
@@ -419,8 +457,8 @@ Window {
             width: parent.width; spacing: 4; opacity: player.enhance ? 1 : 0.45
             Row {
                 width: parent.width
-                Text { text: p.label; color: Theme.label; font.pixelSize: 16; width: parent.width - 50 }
-                Text { text: p.value.toFixed(p.decimals); color: Theme.text; font.pixelSize: 16; width: 50; horizontalAlignment: Text.AlignRight }
+                Text { font.family: Theme.font; text: p.label; color: Theme.label; font.pixelSize: 16; width: parent.width - 50 }
+                Text { font.family: Theme.font; text: p.value.toFixed(p.decimals); color: Theme.text; font.pixelSize: 16; width: 50; horizontalAlignment: Text.AlignRight }
             }
             VSlider { width: parent.width; from: p.from; to: p.to; value: p.value; neutral: p.neutral; onMoved: (v) => p.moved(v) }
         }
@@ -454,19 +492,19 @@ Window {
                     spacing: 20
                     Row {
                         width: parent.width
-                        Text { text: t("enhance"); color: Theme.heading; font.pixelSize: 24; font.weight: Font.Bold; font.letterSpacing: 0.5; width: parent.width - 56; anchors.verticalCenter: parent.verticalCenter }
+                        Text { font.family: Theme.headFont; font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase; text: t("enhance"); color: Theme.heading; font.pixelSize: 24 * Theme.headScale; font.weight: Font.Bold; font.letterSpacing: 0.5; width: parent.width - 56; anchors.verticalCenter: parent.verticalCenter }
                         ToggleSwitch { checked: player.enhance; onToggled: (v) => player.enhance = v; anchors.verticalCenter: parent.verticalCenter }
                     }
                     Column {
                         width: parent.width; spacing: 10; opacity: player.enhance ? 1 : 0.45
-                        Text { text: t("upscale"); color: Theme.label; font.pixelSize: 16 }
+                        Text { font.family: Theme.font; text: t("upscale"); color: Theme.label; font.pixelSize: 16 }
                         Segmented {
                             width: parent.width; enabled: player.enhance
                             model: [t("native"), "1.5×", "2×", "3×"]
                             current: { var i = scales.indexOf(Math.round(player.scale * 10) / 10); return i < 0 ? 0 : i }
                             onPicked: (i) => player.scale = scales[i]
                         }
-                        Text { text: t("method"); color: Theme.label; font.pixelSize: 16; topPadding: 2 }
+                        Text { font.family: Theme.font; text: t("method"); color: Theme.label; font.pixelSize: 16; topPadding: 2 }
                         Segmented {
                             width: parent.width; enabled: player.enhance
                             // shown as Lanczos | FSR 1 | FSR 3.1 | NIS; stored values 0 / 2 / 1 / 3
@@ -475,7 +513,7 @@ Window {
                             current: Math.max(0, values.indexOf(player.upscaler))
                             onPicked: (i) => player.upscaler = values[i]
                         }
-                        Text {
+                        Text { font.family: Theme.font;
                             width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15
                             color: player.upscalerError !== "" ? Theme.warn : Theme.muted
                             text: player.upscalerError !== "" ? t("fsrFallback") + player.upscalerError
@@ -487,7 +525,7 @@ Window {
                     }
                     Column {
                         width: parent.width; spacing: 10; opacity: player.enhance ? 1 : 0.45
-                        Text { text: t("denoise"); color: Theme.label; font.pixelSize: 16 }
+                        Text { font.family: Theme.font; text: t("denoise"); color: Theme.label; font.pixelSize: 16 }
                         Segmented {
                             width: parent.width; model: t("denoiseModes"); enabled: player.enhance
                             current: player.denoise; onPicked: (i) => player.denoise = i
@@ -496,21 +534,21 @@ Window {
                             width: parent.width; model: t("denoiseLevels"); enabled: player.enhance && player.denoise > 0
                             current: player.denoiseStrength; onPicked: (i) => player.denoiseStrength = i
                         }
-                        Text {
+                        Text { font.family: Theme.font;
                             width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted
                             text: t("denoiseHint" + player.denoise)
                         }
-                        Text { text: t("hdr"); color: Theme.label; font.pixelSize: 16; topPadding: 6 }
+                        Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; text: t("hdr"); color: Theme.label; font.pixelSize: 16; topPadding: 6 }
                         Segmented {
                             width: parent.width; model: ["600", "1000", "2000", "4000 nits"]
                             readonly property var peaks: [600, 1000, 2000, 4000]
                             current: Math.max(0, peaks.indexOf(player.hdrPeak))
                             onPicked: (i) => player.hdrPeak = peaks[i]
                         }
-                        Text { width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("hdrHint") }
+                        Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("hdrHint") }
                         Item {
                             width: parent.width; height: 22
-                            Text { text: t("hdrOut"); color: Theme.label; font.pixelSize: 16; anchors.verticalCenter: parent.verticalCenter }
+                            Text { font.family: Theme.font; text: t("hdrOut"); color: Theme.label; font.pixelSize: 16; anchors.verticalCenter: parent.verticalCenter }
                             ToggleSwitch { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                                 checked: player.hdrOutput; onToggled: (v) => player.hdrOutput = v }
                         }
@@ -527,7 +565,7 @@ Window {
                             current: Math.max(0, peaks.indexOf(player.displayPeak))
                             onPicked: (i) => player.displayPeak = peaks[i]
                         }
-                        Text {
+                        Text { font.family: Theme.font;
                             visible: player.hdrOutput
                             width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15
                             color: player.hdrOutputActive ? Theme.ok : Theme.warn
@@ -537,11 +575,11 @@ Window {
                         Item {
                             visible: player.gamescopeAvailable || player.inGamescope
                             width: parent.width; height: 26
-                            Text { text: t("gamescope"); color: Theme.label; font.pixelSize: 16; anchors.verticalCenter: parent.verticalCenter }
+                            Text { font.family: Theme.font; text: t("gamescope"); color: Theme.label; font.pixelSize: 16; anchors.verticalCenter: parent.verticalCenter }
                             ToggleSwitch { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                                 checked: player.gamescope; onToggled: (v) => player.gamescope = v }
                         }
-                        Text {
+                        Text { font.family: Theme.font;
                             visible: player.gamescopeAvailable || player.inGamescope
                             width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15
                             color: player.inGamescope ? Theme.accent3 : Theme.muted
@@ -549,8 +587,8 @@ Window {
                         }
                         Rectangle {
                             visible: player.hdrOutputRestart || player.gamescopeRestart
-                            width: hdrRs.implicitWidth + 22; height: 26; radius: 8; color: hdrRsMa.containsMouse ? Theme.accentHover : Theme.accent
-                            Text { id: hdrRs; anchors.centerIn: parent; text: t("restartNow"); color: Theme.accentInk; font.pixelSize: 16; font.weight: Font.DemiBold }
+                            width: hdrRs.implicitWidth + 22; height: 26; radius: 8 * Theme.round; color: hdrRsMa.containsMouse ? Theme.accentHover : Theme.accent
+                            Text { font.family: Theme.font; id: hdrRs; anchors.centerIn: parent; text: t("restartNow"); color: Theme.accentInk; font.pixelSize: 16; font.weight: Font.DemiBold }
                             MouseArea { id: hdrRsMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: player.restartApp() }
                         }
                     }
@@ -558,7 +596,7 @@ Window {
                         width: parent.width; spacing: 10; opacity: player.enhance ? 1 : 0.45
                         Row {
                             width: parent.width
-                            Text { text: t("aa") + " (FXAA)"; color: Theme.label; font.pixelSize: 16; width: parent.width - 56; anchors.verticalCenter: parent.verticalCenter }
+                            Text { font.family: Theme.font; text: t("aa") + " (FXAA)"; color: Theme.label; font.pixelSize: 16; width: parent.width - 56; anchors.verticalCenter: parent.verticalCenter }
                             ToggleSwitch { checked: player.fxaa; enabled: player.enhance; onToggled: (v) => player.fxaa = v; anchors.verticalCenter: parent.verticalCenter }
                         }
                         Segmented {
@@ -575,16 +613,16 @@ Window {
                         function refresh() { sinks = player.audioSinks() }
                         Component.onCompleted: refresh()
                         Connections { target: win; function onPanelOpenChanged() { if (win.panelOpen) sinkCol.refresh() } }
-                        Text { text: t("audioOut"); color: Theme.label; font.pixelSize: 16 }
+                        Text { font.family: Theme.font; text: t("audioOut"); color: Theme.label; font.pixelSize: 16 }
                         Repeater {
                             model: [{ name: "", desc: t("audioOutDefault") }].concat(sinkCol.sinks.slice(0, 8))
                             delegate: Rectangle {
                                 required property var modelData
                                 readonly property bool sel: player.audioOutput === modelData.name
-                                width: sinkCol.width; height: 28; radius: 8
+                                width: sinkCol.width; height: 28; radius: 8 * Theme.round
                                 color: sinkMa.containsMouse ? Theme.surfaceHover : Theme.surface
                                 gradient: sel ? Theme.sunset : null
-                                Text { anchors { left: parent.left; right: parent.right; leftMargin: 10; rightMargin: 10; verticalCenter: parent.verticalCenter }
+                                Text { font.family: Theme.font; anchors { left: parent.left; right: parent.right; leftMargin: 10; rightMargin: 10; verticalCenter: parent.verticalCenter }
                                     text: modelData.desc; elide: Text.ElideRight; font.pixelSize: 15
                                     color: parent.sel ? Theme.accentInk : Theme.text }
                                 MouseArea { id: sinkMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
@@ -594,8 +632,8 @@ Window {
                         Item { width: 1; height: 6 }
                         Item {
                             width: parent.width; height: 18
-                            Text { text: t("audioIn"); color: Theme.label; font.pixelSize: 16; anchors.verticalCenter: parent.verticalCenter }
-                            Text {
+                            Text { font.family: Theme.font; text: t("audioIn"); color: Theme.label; font.pixelSize: 16; anchors.verticalCenter: parent.verticalCenter }
+                            Text { font.family: Theme.font;
                                 anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                                 font.pixelSize: 13; font.weight: Font.Medium
                                 color: player.audioActive ? Theme.ok : Theme.muted
@@ -605,7 +643,7 @@ Window {
                         // spectrum: 24 bands from 50 Hz (left) to 16 kHz (right)
                         Rectangle {
                             id: spec
-                            width: parent.width; height: 46; radius: 8; color: Theme.surfaceDeep; border.color: Theme.border
+                            width: parent.width; height: 46; radius: 8 * Theme.round; color: Theme.surfaceDeep; border.color: Theme.border
                             Row {
                                 id: specRow
                                 anchors { fill: parent; margins: 6 }
@@ -620,7 +658,7 @@ Window {
                                         readonly property real level: player.audioBands.length > index ? player.audioBands[index] : 0
                                         Rectangle {
                                             anchors.bottom: parent.bottom
-                                            width: parent.width; radius: 2
+                                            width: parent.width; radius: 2 * Theme.round
                                             height: Math.max(2, parent.height * parent.level)
                                             gradient: Theme.sunset
                                             opacity: player.muted ? 0.45 : 1
@@ -629,7 +667,7 @@ Window {
                                 }
                             }
                         }
-                        Text { width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 13; color: Theme.muted; text: t("audioInHint") }
+                        Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 13; color: Theme.muted; text: t("audioInHint") }
                     }
                     Rectangle { width: parent.width; height: 1; color: Theme.line }
                     // ---- Retro TV (CRT-Geom)
@@ -637,12 +675,12 @@ Window {
                         width: parent.width; spacing: 10
                         Item {
                             width: parent.width; height: 28
-                            Text { text: "Retro TV"; color: Theme.heading; font.pixelSize: 21; font.weight: Font.Bold; font.letterSpacing: 0.5; anchors.verticalCenter: parent.verticalCenter }
+                            Text { font.family: Theme.headFont; width: Math.min(implicitWidth, parent.width - 62); elide: Text.ElideRight; font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase; text: "Retro TV"; color: Theme.heading; font.pixelSize: 21 * Theme.headScale; font.weight: Font.Bold; font.letterSpacing: 0.5; anchors.verticalCenter: parent.verticalCenter }
                             ToggleSwitch { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                                 checked: player.retroTv; onToggled: (v) => player.retroTv = v }
                         }
-                        Text { width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("retroHint") }
-                        Text { visible: player.retroTv; text: t("retroLines"); color: Theme.label; font.pixelSize: 16 }
+                        Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("retroHint") }
+                        Text { font.family: Theme.font; visible: player.retroTv; text: t("retroLines"); color: Theme.label; font.pixelSize: 16 }
                         Segmented {
                             visible: player.retroTv
                             width: parent.width
@@ -667,23 +705,23 @@ Window {
                         label: t("audioDelay"); from: -300; to: 300; decimals: 0; neutral: 0; opacity: 1
                         value: player.audioDelay; onMoved: (v) => player.audioDelay = Math.round(v / 10) * 10
                     }
-                    Text { width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("audioDelayHint") }
+                    Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("audioDelayHint") }
                     Item {
                         width: parent.width; height: 26
-                        Text { text: t("normalize"); color: Theme.label; font.pixelSize: 16; anchors.verticalCenter: parent.verticalCenter }
+                        Text { font.family: Theme.font; text: t("normalize"); color: Theme.label; font.pixelSize: 16; anchors.verticalCenter: parent.verticalCenter }
                         ToggleSwitch { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                             checked: player.normalize; onToggled: (v) => player.normalize = v }
                     }
                     Rectangle {
-                        width: parent.width; height: 34; radius: 10; color: rstMa.containsMouse ? Theme.surfaceHover : Theme.surface
-                        Text { anchors.centerIn: parent; text: t("reset"); color: Theme.text; font.pixelSize: 17 }
+                        width: parent.width; height: 34; radius: 10 * Theme.round; color: rstMa.containsMouse ? Theme.surfaceHover : Theme.surface
+                        Text { font.family: Theme.font; anchors.centerIn: parent; text: t("reset"); color: Theme.text; font.pixelSize: 17 }
                         MouseArea { id: rstMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: player.resetEnhance() }
                     }
 
                     // ---- profiles
                     Column {
                         width: parent.width; spacing: 6
-                        Text { text: t("profiles"); color: Theme.label; font.pixelSize: 16 }
+                        Text { font.family: Theme.font; text: t("profiles"); color: Theme.label; font.pixelSize: 16 }
                         Flow {
                             width: parent.width; spacing: 6
                             visible: player.profiles.length > 0
@@ -694,12 +732,12 @@ Window {
                                     required property int index
                                     readonly property bool active: player.activeProfile === modelData
                                     readonly property string bound: player.profileSignal(modelData)
-                                    height: 28; radius: 8; width: chipRow.implicitWidth + 16
+                                    height: 28; radius: 8 * Theme.round; width: chipRow.implicitWidth + 16
                                     color: active ? Theme.accent : (chipMa.containsMouse ? Theme.surfaceHover : Theme.surface)
                                     Row {
                                         id: chipRow; anchors.centerIn: parent; spacing: 6
-                                        Text { text: (index < 9 ? (index + 1) + "  " : "") + modelData + (bound !== "" ? "  ⚡" : ""); color: active ? Theme.accentInk : Theme.text; font.pixelSize: 16; anchors.verticalCenter: parent.verticalCenter }
-                                        Text {
+                                        Text { font.family: Theme.font; text: (index < 9 ? (index + 1) + "  " : "") + modelData + (bound !== "" ? "  ⚡" : ""); color: active ? Theme.accentInk : Theme.text; font.pixelSize: 16; anchors.verticalCenter: parent.verticalCenter }
+                                        Text { font.family: Theme.font;
                                             text: "×"; color: active ? Theme.accentInk : Theme.muted; font.pixelSize: 18; anchors.verticalCenter: parent.verticalCenter
                                             MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; onClicked: player.deleteProfile(modelData) }
                                         }
@@ -711,13 +749,13 @@ Window {
                         Row {
                             width: parent.width; spacing: 6
                             Rectangle {
-                                width: parent.width - saveBtn.width - 6; height: 30; radius: 8; color: Theme.surface
+                                width: parent.width - saveBtn.width - 6; height: 30; radius: 8 * Theme.round; color: Theme.surface
                                 border.color: nameIn.activeFocus ? Theme.accent : Theme.surfaceHover
                                 TextInput {
                                     id: nameIn; anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
                                     verticalAlignment: TextInput.AlignVCenter; color: Theme.text; font.pixelSize: 16; maximumLength: 24
                                     clip: true; selectByMouse: true
-                                    Text { anchors.verticalCenter: parent.verticalCenter; visible: !parent.text && !parent.activeFocus; text: t("profileName"); color: Theme.dim; font.pixelSize: 16 }
+                                    Text { font.family: Theme.font; anchors.verticalCenter: parent.verticalCenter; visible: !parent.text && !parent.activeFocus; text: t("profileName"); color: Theme.dim; font.pixelSize: 16 }
                                     onAccepted: saveBtn.save()
                                     Keys.onEscapePressed: { text = ""; keyRoot.forceActiveFocus() }
                                 }
@@ -725,9 +763,9 @@ Window {
                             Rectangle {
                                 id: saveBtn
                                 function save() { if (nameIn.text.trim() !== "") { player.saveProfile(nameIn.text, bindSig.checked); nameIn.text = ""; keyRoot.forceActiveFocus() } }
-                                width: saveTxt.implicitWidth + 24; height: 30; radius: 8
+                                width: saveTxt.implicitWidth + 24; height: 30; radius: 8 * Theme.round
                                 color: nameIn.text.trim() !== "" ? (saveMa.containsMouse ? Theme.accentHover : Theme.accent) : Theme.surfaceHover
-                                Text { id: saveTxt; anchors.centerIn: parent; text: t("saveProfile"); color: nameIn.text.trim() !== "" ? Theme.accentInk : Theme.muted; font.pixelSize: 16; font.weight: Font.Medium }
+                                Text { font.family: Theme.font; id: saveTxt; anchors.centerIn: parent; text: t("saveProfile"); color: nameIn.text.trim() !== "" ? Theme.accentInk : Theme.muted; font.pixelSize: 16; font.weight: Font.Medium }
                                 MouseArea { id: saveMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: saveBtn.save() }
                             }
                         }
@@ -737,19 +775,19 @@ Window {
                             visible: player.signalKey !== ""
                             spacing: 8
                             Rectangle {
-                                width: 16; height: 16; radius: 4; anchors.verticalCenter: parent.verticalCenter
+                                width: 16; height: 16; radius: 4 * Theme.round; anchors.verticalCenter: parent.verticalCenter
                                 color: bindSig.checked ? Theme.accent : "transparent"; border.color: bindSig.checked ? Theme.accent : Theme.dim
-                                Text { anchors.centerIn: parent; text: "✓"; visible: bindSig.checked; color: Theme.accentInk; font.pixelSize: 15 }
+                                Text { font.family: Theme.font; anchors.centerIn: parent; text: "✓"; visible: bindSig.checked; color: Theme.accentInk; font.pixelSize: 15 }
                             }
-                            Text { text: t("bindSignal").replace("%1", player.signalKey); color: Theme.text; font.pixelSize: 15; width: secB.width - 30; wrapMode: Text.Wrap }
+                            Text { font.family: Theme.font; text: t("bindSignal").replace("%1", player.signalKey); color: Theme.text; font.pixelSize: 15; width: secB.width - 30; wrapMode: Text.Wrap }
                             TapHandler { onTapped: bindSig.checked = !bindSig.checked }
                         }
-                        Text { width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("profilesHint") }
+                        Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("profilesHint") }
                     }
                     Column {
                         width: parent.width; spacing: 3
-                        Text { width: parent.width; text: t("gpu") + ": " + (player.gpuName !== "" ? player.gpuName : t("cpuOnly")); color: Theme.muted; font.pixelSize: 15; wrapMode: Text.Wrap }
-                        Text { width: parent.width; text: player.perf; color: Theme.label; font.pixelSize: 16; wrapMode: Text.Wrap }
+                        Text { font.family: Theme.font; width: parent.width; text: t("gpu") + ": " + (player.gpuName !== "" ? player.gpuName : t("cpuOnly")); color: Theme.muted; font.pixelSize: 15; wrapMode: Text.Wrap }
+                        Text { font.family: Theme.font; width: parent.width; text: player.perf; color: Theme.label; font.pixelSize: 16; wrapMode: Text.Wrap }
                     }
                     Rectangle { width: parent.width; height: 1; color: Theme.line }
                     FrameGenSection { width: parent.width; tr: win.t }
@@ -761,21 +799,21 @@ Window {
                     spacing: 20
                     Column {
                         width: parent.width; spacing: 8
-                        Text { text: "Steam"; color: Theme.heading; font.pixelSize: 21; font.weight: Font.Bold; font.letterSpacing: 0.5 }
-                        Text { width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("steamHint") }
+                        Text { font.family: Theme.headFont; width: Math.min(implicitWidth, parent.width - 62); elide: Text.ElideRight; font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase; text: "Steam"; color: Theme.heading; font.pixelSize: 21 * Theme.headScale; font.weight: Font.Bold; font.letterSpacing: 0.5 }
+                        Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("steamHint") }
                         Rectangle {
-                            width: steamTxt.implicitWidth + 24; height: 32; radius: 10
+                            width: steamTxt.implicitWidth + 24; height: 32; radius: 10 * Theme.round
                             color: steamMa.containsMouse ? Theme.surfaceHover : Theme.surface
-                            Text { id: steamTxt; anchors.centerIn: parent; text: t("steamAdd"); color: Theme.text; font.pixelSize: 16; font.weight: Font.DemiBold }
+                            Text { font.family: Theme.font; id: steamTxt; anchors.centerIn: parent; text: t("steamAdd"); color: Theme.text; font.pixelSize: 16; font.weight: Font.DemiBold }
                             MouseArea { id: steamMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: player.addToSteam() }
                         }
                         Item {
                             width: parent.width; height: 26
-                            Text { text: t("autostart"); color: Theme.label; font.pixelSize: 16; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 60; elide: Text.ElideRight }
+                            Text { font.family: Theme.font; text: t("autostart"); color: Theme.label; font.pixelSize: 16; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 60; elide: Text.ElideRight }
                             ToggleSwitch { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                                 checked: player.autostart; onToggled: (v) => player.autostart = v }
                         }
-                        Text { width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("autostartHint") }
+                        Text { font.family: Theme.font; width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.15; font.pixelSize: 15; color: Theme.muted; text: t("autostartHint") }
                     }
                     Rectangle { width: parent.width; height: 1; color: Theme.line }
                     Rectangle { width: parent.width; height: 1; color: Theme.line }

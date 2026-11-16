@@ -21,7 +21,7 @@ sudo apt install cmake ninja-build g++ pkg-config patchelf file python3 glslang-
 | Afspilning (FFmpeg), seek, pause, volumen, drag&drop, fuldskærm | ✅ |
 | Hardware-dekodning på AMD/Intel (VAAPI), automatisk fallback til software | ✅ (ikke testet på rigtig GPU endnu) |
 | Lyd via PulseAudio/PipeWire (lyd er master-clock) | ✅ |
-| GPU-kæde: RgbToLinear → [støjfjerning: temporal/NLM] → FXAA (AaLuma+AaFxaa, originale shaders) → Lanczos-3, **AMD FSR 1, NVIDIA NIS eller AMD FSR 3.1** opskalering → sharpen/eksponering/kontrast/mætning → ScaleBlit (sRGB) eller LxPqOut (PQ, HDR-output) | ✅ |
+| GPU-kæde: RgbToLinear → [støjreduktion: temporal/NLM] → FXAA (AaLuma+AaFxaa, originale shaders) → Lanczos-3, **AMD FSR 1, NVIDIA NIS eller AMD FSR 3.1** opskalering → sharpen/eksponering/kontrast/mætning → ScaleBlit (sRGB) eller LxPqOut (PQ, HDR-output) | ✅ |
 | **AMD FSR 3.1-opskalering** (eksperimentel): FidelityFX SDK 1.1.4 FSR 3.1 upscaler på Vulkan med VeyAmux' egen sub-pixel-bevægelsesmåling | ✅ (blødere end Lanczos i test, se nedenfor) |
 | **Lossless Scaling frame generation** (Fast 2× / Fast 3×) via brugerens egen lsfg-vk + Lossless Scaling fra Steam | ✅ testet af brugeren på RX 9070 XT / Bazzite |
 | Vulkan-device vælges automatisk (diskret GPU først); `VEYAMUX_VK_DEVICE=<n>` tvinger valg | ✅ |
@@ -45,8 +45,8 @@ viser derfor først det målte indhold og signalet bagefter, fx `≈1920×1080 @
   checkerboard) eller kornfilter efter opskaleringen genskaber fine detaljer og læses derfor som højere opløsning; meget
   flade scener giver intet skøn. `veyamux-probe-test` i build-mappen tester begge målinger på rå luma-filer.
 
-## Støjfjerning
-Menu → *Forbedring* → *Støjfjerning*: Fra / Rumlig / Temporal / Begge og Let / Middel / Kraftig. Kører først i kæden
+## Støjreduktion
+Menu → *Forbedring* → *Støjreduktion*: Fra / Rumlig / Temporal / Begge og Let / Middel / Kraftig. Kører først i kæden
 (på kildebilledet før FXAA, opskalering og skarphed), så *Skarphed* kan skrues op uden at gøre støjen skarp.
 - **Rumlig** (`shaders/LxNlm.hlsl`): non-local means – hver pixel blandes med pixels i et 7×7-område, hvis 3×3-omgivelser
   og farve ligner den. Billede for billede, ingen spøgelser ved bevægelse.
@@ -60,7 +60,7 @@ Begge 36,9–40,9 dB, alle med detalje 0,97–1,02. En rød boks, der flytter 40
 spor eller glorier (ingen pixel over 30/255 fra det rene billede). Hastighed på et rigtigt grafikkort er ikke målt her.
 
 ## Bevægelsesmåling (FSR-opskalering)
-Video har ingen bevægelsesvektorer fra en spilmotor, så VeyAmux måler dem selv til FSR 3.1-opskaleringen og den temporale støjfjerning
+Video har ingen bevægelsesvektorer fra en spilmotor, så VeyAmux måler dem selv til FSR 3.1-opskaleringen og den temporale støjreduktion
 (`src/MotionEstimator.cpp`): luma-pyramide med op til 7 niveauer, regulariseret Lucas-Kanade fra groft til fint,
 udfyldning af flade områder og til sidst skarpe bevægelseskanter (`LxMvSelect`). Over 2560 px bredde måles i halv opløsning.
 
@@ -113,6 +113,20 @@ Menu → *Forbedring* → *Opskalering* (1,5× / 2× / 3×) og *Metode*:
   36,4 / 32,8 dB; meget detaljeret motiv 26,6 / 25,6 dB (27,2 dB med perfekt bevægelse – det eneste tilfælde, hvor FSR slår
   Lanczos). Konklusion: på video er FSR 3.1 blødere end Lanczos; derfor er Lanczos standard. FSR 4.1.2 findes kun som lukkede
   Windows-DLL'er og kan ikke bruges i et Linux-program.
+
+## Temaer
+`qml/Theme.qml` styrer alle farver, hjørneradier og skrifttyper. Temaet vælges på startskærmen (`ui/theme`), skiftes med
+det samme og gælder både startskærmen og menuen.
+
+| Tema | Farver | Form og skrift |
+|---|---|---|
+| Vice | det oprindelige: violet med pink→orange | runde hjørner, systemets skrift |
+| Code | sort med terminalgrøn (#00FF41) | mindre runde hjørner, monospace overalt |
+| Inferno | næsten sort med blodrød og glød | Cinzel (OFL) til overskrifter |
+| Retro | 8-bit konsol: grå, sort og rød | firkantet, 2 px sort kant med lys top og mørk bund, Press Start 2P (OFL) til overskrifter og hovedknapper, store bogstaver i knapper |
+
+Logoet findes i én udgave pr. tema (`qml/icons/logo-<tema>.svg`, i Retro som 16×16 pixelgrafik). Vinduesikonet følger
+også temaet på X11/XWayland. På Wayland bruger skrivebordet skrivebordsfilens ikon, som er Vice-logoet.
 
 ## Retro TV (CRT-Geom)
 `shaders/LxCrtGeom.hlsl` er crt-geom fra ShaderGlass' forudindstilling `crt/crt-geom`. ShaderGlass har den kun som
@@ -266,7 +280,7 @@ selv hvis programmet lukkes brat). Replay gemmes fra et keyframe i en baggrundst
 afvigelse. libva bundles ikke i AppImage'en (værtens libva finder værtens VA-driver).
 
 ## GPU-tid og latens
-Vulkan-timestamps pr. trin (input, støjfjerning, kantudjævning, opskalering, finish, output) i hver frame-slot, læst når
+Vulkan-timestamps pr. trin (input, støjreduktion, kantudjævning, opskalering, finish, output) i hver frame-slot, læst når
 slotten genbruges (ingen ventetid), udglattet. Menuen viser GPU-tid, CPU-tid og "i VeyAmux" (capture-driverens
 tidsstempel → GPU-arbejde færdigt).
 
@@ -336,4 +350,4 @@ C capture · 1–9 profiler · F9 gem replay · F10 optag · F12 skærmbillede
 Licens: GPL-3.0 (som det oprindelige Veyra-NRVideo, som VeyAmux bygger på). Tredjepart: se `THIRD_PARTY_NOTICES_LINUX.md`.
 
 Testværktøjer i build-mappen: `veyamux-upscale-test <shaders> <in.rgba> <w> <h> <frames> <out.rgba> lanczos|fsr|fsr1|nis [skala]` (hele forbedringskæden, til
-PSNR-sammenligning af opskaleringsmetoderne; `VEYAMUX_TEST_NR=tilstand,styrke` slår støjfjerning til).
+PSNR-sammenligning af opskaleringsmetoderne; `VEYAMUX_TEST_NR=tilstand,styrke` slår støjreduktion til).

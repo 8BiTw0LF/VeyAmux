@@ -142,6 +142,11 @@ needed for its own frame generation**, and everything else works without it:
 - **Start when the capture card is plugged in**: a small background helper opens VeyAmux fullscreen as soon as the card
   appears.
 - **Updates through Gear Lever / AppImageUpdate** (only the changed parts are downloaded).
+- **Four themes**, chosen on the start screen, and the logo changes with them:
+  - **Vice**: violet with a pink-to-orange sunset gradient.
+  - **Code**: black with terminal green and monospace text.
+  - **Inferno**: near-black with blood red, ember orange and classical capitals.
+  - **Retro**: 8-bit console greys and red, square buttons with a hard edge, and a pixel font.
 - **English and Danish**, chosen automatically. The whole menu is visible at once, with no scrolling.
 
 ## Latency
@@ -281,6 +286,7 @@ sudo apt install cmake ninja-build g++ pkg-config patchelf file python3 glslang-
   - CRT-Geom by cgwg, Themaister and DOLLS (GPL-2.0+), as used in [ShaderGlass](https://github.com/mausimus/ShaderGlass)
   - Qt 6 and FFmpeg (LGPL)
   - PipeWire headers (MIT)
+  - Press Start 2P and Cinzel fonts (SIL OFL 1.1)
   - SPIRV-Reflect (Apache-2.0)
 
   See [THIRD_PARTY_NOTICES_LINUX.md](THIRD_PARTY_NOTICES_LINUX.md).

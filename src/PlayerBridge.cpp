@@ -27,6 +27,7 @@ using veyamux::MediaEngine;
 
 PlayerBridge::PlayerBridge(const QString& shaderDir, QObject* parent)
     : QObject(parent), engine_(shaderDir.toStdString()), rec_(std::make_unique<veyamux::Recorder>()) {
+    setTheme(QSettings().value("ui/theme", "vice").toString());
     rec_->onMessage = [this](const std::string& m, bool error) {
         const QString q = QString::fromStdString(m);
         QMetaObject::invokeMethod(this, [this, q, error] { onRecMessage(q, error); }, Qt::QueuedConnection);
@@ -569,7 +570,7 @@ QString PlayerBridge::timingText(float gpu, const std::array<float, veyamux::Gpu
     if (pipeMs > 0) t += L(" · in VeyAmux %1 ms", " · i VeyAmux %1 ms").arg(pipeMs, 0, 'f', 1);
     if (gpu >= 0) {
         static const char* en[] = {"input", "noise red.", "FXAA", "upscale", "finish", "OBS"};
-        static const char* da[] = {"ind", "støjfjern.", "FXAA", "opskal.", "afslut.", "OBS"};
+        static const char* da[] = {"ind", "støjred.", "FXAA", "opskal.", "afslut.", "OBS"};
         QStringList parts;
         for (int i = 0; i < veyamux::GpuTimer::kStages; ++i)
             if (st[size_t(i)] >= 0) parts << QString("%1 %2").arg(L(en[i], da[i])).arg(double(st[size_t(i)]), 0, 'f', 2);
@@ -856,6 +857,17 @@ QVariantList PlayerBridge::captureModes(const QString& path) {
     QVariantList out;
     for (const auto& m : lastModes_) out << QString::fromStdString(m.label);
     return out;
+}
+
+void PlayerBridge::setTheme(const QString& t) {
+    static const QStringList known{"vice", "code", "inferno", "retro"};
+    const QString v = known.contains(t) ? t : QStringLiteral("vice");
+    // the window icon follows the theme's logo (X11/XWayland task bars; Wayland uses the desktop file's icon)
+    QGuiApplication::setWindowIcon(QIcon(QStringLiteral(":/qml/icons/logo-%1.svg").arg(v)));
+    if (v == theme_) return;
+    theme_ = v;
+    QSettings().setValue("ui/theme", v);
+    emit themeChanged();
 }
 
 QVariantList PlayerBridge::audioSources() {

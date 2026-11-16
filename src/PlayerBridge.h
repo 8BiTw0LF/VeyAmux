@@ -76,6 +76,8 @@ class PlayerBridge : public QObject {
     Q_PROPERTY(double displayHz READ displayHz NOTIFY lsfgChanged)
     Q_PROPERTY(bool fxaa READ fxaa WRITE setFxaa NOTIFY enhanceChanged)
     Q_PROPERTY(bool retroTv READ retroTv WRITE setRetroTv NOTIFY enhanceChanged)
+    // UI theme: vice / code / inferno / retro (Theme.qml), saved as ui/theme
+    Q_PROPERTY(QString theme READ theme WRITE setTheme NOTIFY themeChanged)
     Q_PROPERTY(int retroLines READ retroLines WRITE setRetroLines NOTIFY enhanceChanged)
     // Denoise: 0 off, 1 spatial (NLM), 2 temporal, 3 both; strength 0 light, 1 medium, 2 strong
     Q_PROPERTY(int denoise READ denoise WRITE setDenoise NOTIFY enhanceChanged)
@@ -157,6 +159,8 @@ public:
     QString upscalerError() const { return upError_; }
     bool fxaa() const { return s_.fxaa; }
     bool retroTv() const { return s_.retroTv; }
+    QString theme() const { return theme_; }
+    void setTheme(const QString& t);
     int retroLines() const { return s_.retroLines; }
     int denoise() const { return int(s_.denoise); }
     int hdrPeak() const { return int(std::lround(s_.hdrPeak)); }
@@ -361,6 +365,7 @@ public slots:
     void chooseLsfgFolder();
 
 signals:
+    void themeChanged();
     void audioMeterChanged();
     void noticeChanged();
     void profilesChanged();
@@ -404,6 +409,7 @@ private:
     bool lastPlaying_ = false;
     std::vector<veyamux::CaptureMode> lastModes_;
     veyamux::AudioMeter meter_;
+    QString theme_;
     QVariantList bands_;
     bool audioActive_ = false;
     QVariantList audioBands() const { return bands_; }
