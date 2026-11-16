@@ -78,6 +78,9 @@ class PlayerBridge : public QObject {
     Q_PROPERTY(bool retroTv READ retroTv WRITE setRetroTv NOTIFY enhanceChanged)
     // UI theme: vice / code / inferno / retro (Theme.qml), saved as ui/theme
     Q_PROPERTY(QString theme READ theme WRITE setTheme NOTIFY themeChanged)
+    // UI language: languageChoice is auto or a code (saved as ui/lang); language is the one in use
+    Q_PROPERTY(QString language READ language NOTIFY languageChanged)
+    Q_PROPERTY(QString languageChoice READ languageChoice WRITE setLanguageChoice NOTIFY languageChanged)
     Q_PROPERTY(int retroLines READ retroLines WRITE setRetroLines NOTIFY enhanceChanged)
     // Denoise: 0 off, 1 spatial (NLM), 2 temporal, 3 both; strength 0 light, 1 medium, 2 strong
     Q_PROPERTY(int denoise READ denoise WRITE setDenoise NOTIFY enhanceChanged)
@@ -160,6 +163,10 @@ public:
     bool fxaa() const { return s_.fxaa; }
     bool retroTv() const { return s_.retroTv; }
     QString theme() const { return theme_; }
+    QString language() const { return lang_; }
+    QString languageChoice() const { return langChoice_; }
+    void setLanguageChoice(const QString& c);
+    static QString systemLanguage();
     void setTheme(const QString& t);
     int retroLines() const { return s_.retroLines; }
     int denoise() const { return int(s_.denoise); }
@@ -221,7 +228,7 @@ public:
     bool fgPaused() const { return fgPaused_; }
     double displayHz() const;
     // Set by main() before the window exists: whether Vulkan UI is used and whether lsfg-vk was enabled for this run.
-    void setRunContext(bool vulkanUi, bool lsfgActive, bool lsfgCrashed, bool danish);
+    void setRunContext(bool vulkanUi, bool lsfgActive, bool lsfgCrashed);
     void setWindow(QWindow* w) {
         window_ = w;
         refreshEdidPeak();
@@ -365,6 +372,7 @@ public slots:
     void chooseLsfgFolder();
 
 signals:
+    void languageChanged();
     void themeChanged();
     void audioMeterChanged();
     void noticeChanged();
@@ -420,7 +428,9 @@ private:
     LiveVulkan* liveVk_ = nullptr;
     QPointer<QWindow> window_;
     lsfg::Detection lsfg_;
-    bool vulkanUi_ = false, lsfgActive_ = false, lsfgCrashed_ = false, danish_ = false;
+    bool vulkanUi_ = false, lsfgActive_ = false, lsfgCrashed_ = false;
+    QString lang_ = "en";            // the language in use (en, da, de, es, fr, sv, nb, ru)
+    QString langChoice_ = "auto";    // what the user picked (ui/lang): auto = follow the system
     int lsfgMultiplier_ = 2;
     bool fgPaused_ = false;
     int fgHighTicks_ = 0, fgLowTicks_ = 0;
@@ -470,5 +480,6 @@ private:
     void updateLsfgLog();
     void updateOutputFps(uint64_t shownTotal);
     void updateLsfgMultiplier();
-    QString L(const char* en, const char* da) const { return QString::fromUtf8(danish_ ? da : en); }
+    // a text in the UI language: Danish inline, English as the key into i18n/messages.json for the others
+    QString L(const char* en, const char* da) const;
 };

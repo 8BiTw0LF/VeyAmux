@@ -39,15 +39,6 @@ static QString findShaderDir() {
 }
 
 // Danish when the language OR the region is Danish (e.g. LANG=en_DK or a Danish LC_TIME also count); English otherwise.
-static bool systemIsDanish() {
-    const QLocale sys = QLocale::system();
-    if (sys.language() == QLocale::Danish || sys.territory() == QLocale::Denmark) return true;
-    for (const char* var : {"LC_ALL", "LC_MESSAGES", "LANG", "LANGUAGE", "LC_TIME", "LC_NUMERIC"}) {
-        const QString v = qEnvironmentVariable(var);
-        if (v.startsWith("da") || v.contains("_DK")) return true;
-    }
-    return false;
-}
 
 static QString relaunchTarget() {
     // Inside an AppImage the binary lives in a temporary mount that vanishes on exit; relaunch the AppImage itself.
@@ -302,10 +293,8 @@ int main(int argc, char** argv) {
     engine.rootContext()->setContextProperty("startPanel", startPanel);
     engine.rootContext()->setContextProperty("startDialog", startDialog);
     engine.rootContext()->setContextProperty("keepControls", !grabPath.isEmpty());
-    const bool danish = systemIsDanish();
-    engine.rootContext()->setContextProperty("uiLanguage", danish ? "da" : "en");
     player.setVrrAtStart(vrrAtStart);
-    player.setRunContext(vulkanUi, lsfgEnabled, lsfgCrashed, danish);
+    player.setRunContext(vulkanUi, lsfgEnabled, lsfgCrashed);
     engine.load(QUrl("qrc:/qml/Main.qml"));
     if (engine.rootObjects().isEmpty()) return 1;
     auto* win = qobject_cast<QQuickWindow*>(engine.rootObjects().first());

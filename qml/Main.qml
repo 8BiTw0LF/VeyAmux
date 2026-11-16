@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Window
 import VeyAmux 1.0
+import "Strings.js" as S
 
 Window {
     id: win
@@ -21,163 +22,8 @@ Window {
     property bool scrubbing: false
     property real scrubValue: 0
 
-    readonly property var strings: ({
-        en: { open: "Open file", drop: "Drop a video here, or open a file", enhance: "Enhance",
-              upscale: "Upscale", off: "Off", aa: "Anti-aliasing", aaq: ["Medium", "High", "Ultra"],
-              sharpen: "Sharpness", exposure: "Exposure", contrast: "Contrast", saturation: "Saturation",
-              hdr: "HDR capture (P010): source peak brightness",
-              hdrHint: "Used when the capture card sends HDR (pick a P010 (HDR) mode under Capture card). The HDR picture is tone-mapped to your SDR display (BT.2390, as in Veyra); match the peak to the game's HDR calibration - lower = brighter.",
-              vrr: "VRR: the game's own frame rate, evenly paced",
-              vrrHint: "Shows only the game's new pictures, spaced evenly at its own rate (e.g. 45 fps), for a display with VRR/adaptive sync. Turn on Adaptive sync in the display settings and run VeyAmux fullscreen. Adds up to about half a frame of latency.",
-              vrrRestart: "VeyAmux must restart to switch vsync for VRR.",
-              profiles: "Profiles", profileName: "Name, e.g. PS5", saveProfile: "Save", bindSignal: "Use automatically for this signal (%1)", profilesHint: "Saves the picture settings and the audio delay. Keys 1-9 switch profile; ⚡ = applied automatically when that capture signal is opened.",
-              normalize: "Even out loudness", audioOut: "Sound output", audioOutDefault: "System default",
-              audioIn: "Sound from the source", audioInOn: "● Sound is coming in", audioInNone: "No sound", audioInMuted: "● Coming in (muted)",
-              audioInHint: "Shows the source's own sound. Mute (M) and the volume only affect your speakers: recordings, replays and the live stream always get the sound.",
-              audioDelay: "Audio delay (ms)", audioDelayHint: "Positive = sound later. Use it when the picture lags the sound (e.g. with Lossless Scaling). Capture cards can only delay the sound.",
-              denoise: "Noise reduction", denoiseModes: ["Off", "Spatial", "Temporal", "Both"], denoiseLevels: ["Light", "Medium", "Strong"],
-              denoiseHint0: "Removes grain, dither and compression noise before upscaling and sharpening, so Sharpness can be turned up without sharpening the noise.",
-              denoiseHint1: "Non-local means: averages each pixel with similar-looking pixels nearby. Frame by frame, never smears motion; strong settings soften fine texture a little.",
-              denoiseHint2: "Averages each pixel over several frames along the measured motion: keeps the most detail. Fast, unpredictable motion falls back to the current frame.",
-              denoiseHint3: "Temporal first, then a gentle spatial pass: the cleanest picture. Pick the level after how noisy the source is.",
-              reset: "Reset", gpu: "GPU", cpuOnly: "No GPU — passthrough", hint: "Space play/pause · ←/→ seek · F fullscreen · E enhance · M mute · C capture", theme: "Theme",
-              native: "Native",
-              method: "Method", lanczos: "Lanczos", fsr31: "AMD FSR 3.1",
-              lanczosHint: "Sharp classic scaling, frame by frame. No added latency.",
-              peakEdid: "Auto: the display reports %1 nits.", peakNoEdid: "Auto: the display reports no peak, 1000 nits is used.",
-              nisHint: "NVIDIA Image Scaling (open source, runs on any GPU): 6-tap directional scaling with adaptive sharpening, frame by frame, no added latency.",
-              fsr1Hint: "AMD FidelityFX Super Resolution 1 (open source): edge-adaptive upscaling (EASU) plus RCAS sharpening, frame by frame. Made for game pictures, no added latency.",
-              fsr31Hint: "AMD FidelityFX (open source), builds the picture over several frames from motion VeyAmux measures in the video. Experimental: FSR is made for games, and in VeyAmux's tests on video it came out softer than Lanczos.",
-              fsrNeedsScale: "Choose 1.5×, 2× or 3× to use it.",
-              fsrFallback: "FSR 3.1 could not start, using Lanczos: ",
-              capture: "Capture", captureTitle: "Capture card or window", device: "Device", mode: "Mode (resolution · rate · format)", audio: "Audio source", noAudio: "No audio", defaultInput: "Default input (system default microphone)",
-              retroHint: "Makes the picture look like an old CRT television (CRT-Geom from ShaderGlass): a slightly curved glass screen with rounded corners, visible scanlines and the TV's red-green-blue phosphor stripes. Best for retro games. It replaces the upscaling method and the sharpness setting.",
-              retroLines: "Scanlines",
-              screenShare: "Window or screen …",
-              screenShareHint: "Share a program's window or a whole screen, and VeyAmux treats it like a capture card (upscaling, frame generation, recording). After Start, your desktop asks what to share. Choose no audio if the program plays its own sound.",
-              noDevices: "No capture devices found. Check that the card is connected (it must appear as /dev/video*).",
-              refresh: "Refresh", cancel: "Cancel", start: "Start", live: "LIVE",
-              fg: "Frame generation", fgOff: "Off",
-              obs: "OBS (browser source)",
-              obsOff: "Off. Turn on to stream the picture to OBS while you use VeyAmux.",
-              obsWaiting: "Ready - waiting for OBS (%1).",
-              obsLive: "OBS is receiving the picture (%1 connected).",
-              obsRes: "Resolution sent to OBS",
-              obsSave: "Save browser file…", obsCopy: "Copy address",
-              obsSaved: "Browser file: %1",
-              autostart: "Start when the capture card is plugged in", autostartHint: "A small background helper (started with your desktop) opens VeyAmux fullscreen as soon as the card you used last appears.",
-              steamAdd: "Add to Steam", steamHint: "Adds VeyAmux to your Steam library as a non-Steam game: it starts fullscreen on the last capture card, also from Big Picture and Game Mode. Close Steam first.",
-              hdrOut: "HDR output (experimental)",
-              gamescope: "Start in gamescope (HDR + VRR)",
-              gamescopeHint: "Runs VeyAmux fullscreen inside gamescope, which gives HDR and adaptive sync even through XWayland. Lossless Scaling is not used inside gamescope (its layer clashes with gamescope's); AMD FSR 3.1 2× works. Takes effect at the next start.",
-              gamescopeOn: "Running inside gamescope.",
-              hdrOutOn: "HDR display active: HDR sources are shown up to the display peak above, the rest at 203 nits SDR white.",
-              hdrOutNo: "No HDR swapchain: turn on HDR in the system's display settings (KDE Plasma 6 / GNOME 48 or newer) and restart VeyAmux.",
-              hdrOutRestart: "Takes effect when VeyAmux restarts.",
-              hdrOutSw: "VeyAmux is running with the software renderer (Vulkan could not start), so there is no HDR output.",
-              hdrOutX11: "VeyAmux runs through XWayland on this system, and XWayland has no HDR. Start it natively on Wayland (VEYAMUX_UI=vulkan with QT_QPA_PLATFORM=wayland) to use HDR output.",
-              overlayHint: "F3 hides · line = frame time (2 s), turquoise = average",
-              streamTitle: "Live stream", streamOwn: "Own server", streamKey: "Stream key", streamStart: "Go live", streamStop: "Stop stream",
-              streamHint: "Streams VeyAmux's picture and sound straight to Twitch, YouTube or your own RTMP server (H.264, encoded on the GPU), without OBS. Lossless Scaling's generated frames are not included. The key is stored in VeyAmux's settings file.",
-              recTitle: "Instant replay & recording", recOff: "Instant replay is off. F10 records, F12 takes a screenshot.",
-              recReplayOn: "the last %1 s are kept (F9 saves)", recLength: "Replay length", recRes: "Recording resolution",
-              recSave: "Save replay (F9)", recStart: "Record (F10)", recStop: "Stop (F10)", recShot: "Screenshot (F12)", recFolder: "Folder",
-              obsHelp: "In OBS: Sources → + → Browser → tick \"Local file\" → pick the saved file, and set width/height to your canvas (e.g. 1920 × 1080). Only the video is sent: add the sound with Application Audio Capture (VeyAmux) or straight from the capture card.",
-              lsPerf: "Performance mode",
-              fsrFgTitle: "Free (without Lossless Scaling)", fsrFg: "AMD FSR 3.1 2× (free)",
-              fsrFgHint: "Open-source frame generation inside VeyAmux, for capture cards: doubles the frame rate (60 → 120 fps). Motion is estimated from the pictures, so quality is below Lossless Scaling, and the real frame is shown half a frame later.",
-              fgPaused: "Paused automatically: the capture runs at about 120 Hz, so no frames are generated. Resumes when it drops below 80 fps.",
-              lsPerfHint: "Lighter Lossless Scaling model: faster, slightly lower quality. Flow scale is set automatically for your resolution (now %1 %).",
-              lsFixed: "Fixed 2× (doubles)", lsFixedHint: "Always doubles the frame rate (60 → 120 fps).",
-              ls3x: "Fixed 3× (triples)", ls3xHint: "Always triples the frame rate (60 → 180 fps, 40 → 120 fps). Needs a display fast enough for the result.",
-              lsActive: "Active through lsfg-vk. Lossless Scaling: %1", lsReady: "Lossless Scaling found: %1",
-              lsRestart: "VeyAmux must restart to turn Lossless Scaling on.",
-              lsNoInstall: "Lossless Scaling was not found in your Steam libraries. It has to be bought and installed through Steam.",
-              lsNoDll: "Only Lossless.dll was found. lsfg-vk 2 needs lsfg-vk.dll: in Steam open Lossless Scaling → Properties → Betas and choose the lsfg-vk branch.",
-              lsNoLayer: "lsfg-vk is not installed. Install it from lsfg-vk.dev; VeyAmux uses it to run Lossless Scaling on Linux.",
-              lsOldLayer: "An older lsfg-vk (1.x) was found. VeyAmux needs lsfg-vk 2.0 or newer.",
-              lsNoVulkan: "Needs the Vulkan display mode; VeyAmux is running in software mode.",
-              lsCrashed: "VeyAmux closed unexpectedly the last time it started with Lossless Scaling, so it has been turned off.",
-              restartNow: "Restart now", tryAgain: "Try again", chooseFolder: "Choose folder…", checkAgain: "Check again" },
-        da: { open: "Åbn fil", drop: "Træk en video hertil, eller åbn en fil", enhance: "Forbedring",
-              upscale: "Opskalering", off: "Fra", aa: "Anti-aliasing", aaq: ["Medium", "Høj", "Ultra"],
-              sharpen: "Skarphed", exposure: "Eksponering", contrast: "Kontrast", saturation: "Farvemætning",
-              hdr: "HDR-capture (P010): kildens maks. lysstyrke",
-              hdrHint: "Bruges når capture-kortet sender HDR (vælg en P010 (HDR)-tilstand under Capture-kort). HDR-billedet tonemappes til din SDR-skærm (BT.2390, som i Veyra); vælg værdien efter spillets HDR-kalibrering – lavere = lysere.",
-              vrr: "VRR: spillets egen billedfrekvens i jævn takt",
-              vrrHint: "Viser kun spillets nye billeder, jævnt fordelt i dets egen takt (fx 45 fps), til en skærm med VRR/adaptiv synkronisering. Slå Adaptiv synkronisering til i skærmindstillingerne, og kør VeyAmux i fuldskærm. Giver op til ca. et halvt billedes ekstra forsinkelse.",
-              vrrRestart: "VeyAmux skal genstarte for at skifte vsync til VRR.",
-              profiles: "Profiler", profileName: "Navn, fx PS5", saveProfile: "Gem", bindSignal: "Brug automatisk til dette signal (%1)", profilesHint: "Gemmer billedindstillingerne og lydforsinkelsen. Tasterne 1-9 skifter profil; ⚡ = bruges automatisk, når det capture-signal åbnes.",
-              normalize: "Udlign lydstyrke", audioOut: "Lydudgang", audioOutDefault: "Systemets standard",
-              audioIn: "Lyd fra kilden", audioInOn: "● Der kommer lyd", audioInNone: "Ingen lyd", audioInMuted: "● Kommer ind (slået fra)",
-              audioInHint: "Viser kildens egen lyd. Slå lyd fra (M) og lydstyrken gælder kun dine højttalere: optagelser, replays og livestreamen får altid lyden med.",
-              audioDelay: "Lydforsinkelse (ms)", audioDelayHint: "Positiv = lyden senere. Brug den, når billedet halter efter lyden (fx med Lossless Scaling). Ved capture-kort kan lyden kun forsinkes.",
-              denoise: "Støjreduktion", denoiseModes: ["Fra", "Rumlig", "Temporal", "Begge"], denoiseLevels: ["Let", "Middel", "Kraftig"],
-              denoiseHint0: "Fjerner korn, dithering og komprimeringsstøj før opskalering og skarphed, så Skarphed kan skrues op uden at gøre støjen skarp.",
-              denoiseHint1: "Non-local means: blander hver pixel med pixels i nærheden, der ligner den. Billede for billede, slører aldrig bevægelse; kraftig gør fin tekstur en anelse blødere.",
-              denoiseHint2: "Midler hver pixel over flere billeder langs den målte bevægelse: bevarer flest detaljer. Ved hurtig, uforudsigelig bevægelse bruges det aktuelle billede.",
-              denoiseHint3: "Først temporal, så en mild rumlig: det reneste billede. Vælg niveau efter hvor støjfyldt kilden er.",
-              reset: "Nulstil", gpu: "GPU", cpuOnly: "Ingen GPU — uden forbedring", hint: "Mellemrum afspil/pause · ←/→ spol · F fuldskærm · E forbedring · M lyd fra · C capture", theme: "Tema",
-              native: "Original",
-              method: "Metode", lanczos: "Lanczos", fsr31: "AMD FSR 3.1",
-              lanczosHint: "Skarp klassisk skalering, billede for billede. Ingen ekstra forsinkelse.",
-              peakEdid: "Auto: skærmen oplyser %1 nits.", peakNoEdid: "Auto: skærmen oplyser ingen top-lysstyrke, 1000 nits bruges.",
-              nisHint: "NVIDIA Image Scaling (open source, virker på alle grafikkort): 6-taps retningsbestemt skalering med adaptiv skarphed, billede for billede, ingen ekstra forsinkelse.",
-              fsr1Hint: "AMD FidelityFX Super Resolution 1 (open source): kantfølsom opskalering (EASU) plus RCAS-skarphed, billede for billede. Lavet til spilbilleder, ingen ekstra forsinkelse.",
-              fsr31Hint: "AMD FidelityFX (open source), opbygger billedet over flere billeder ud fra bevægelse, som VeyAmux måler i videoen. Eksperimentel: FSR er lavet til spil, og i VeyAmux' test på video blev den blødere end Lanczos.",
-              fsrNeedsScale: "Vælg 1,5×, 2× eller 3× for at bruge den.",
-              fsrFallback: "FSR 3.1 kunne ikke starte, bruger Lanczos: ",
-              capture: "Capture", captureTitle: "Capture-kort eller vindue", device: "Enhed", mode: "Tilstand (opløsning · frekvens · format)", audio: "Lydkilde", noAudio: "Ingen lyd", defaultInput: "Standard-indgang (systemets standardmikrofon)",
-              retroHint: "Får billedet til at ligne et gammelt billedrørs-tv (CRT-Geom fra ShaderGlass): en let buet glasskærm med runde hjørner, synlige billedlinjer og tv'ets røde, grønne og blå fosforstriber. Bedst til retrospil. Den erstatter opskaleringsmetoden og skarphedsindstillingen.",
-              retroLines: "Billedlinjer",
-              screenShare: "Vindue eller skærm …",
-              screenShareHint: "Del et programs vindue eller en hel skærm, så behandler VeyAmux det som et capture-kort (opskalering, frame generation, optagelse). Efter Start spørger skrivebordet, hvad der skal deles. Vælg ingen lyd, hvis programmet selv spiller lyden.",
-              noDevices: "Ingen capture-enheder fundet. Tjek at kortet er tilsluttet (det skal vises som /dev/video*).",
-              refresh: "Opdater", cancel: "Annuller", start: "Start", live: "LIVE",
-              fg: "Frame generation", fgOff: "Fra",
-              obs: "OBS (browserkilde)",
-              obsOff: "Fra. Slå til for at sende billedet til OBS, mens du bruger VeyAmux.",
-              obsWaiting: "Klar - venter på OBS (%1).",
-              obsLive: "OBS modtager billedet (%1 tilsluttet).",
-              obsRes: "Opløsning til OBS",
-              obsSave: "Gem browserfil…", obsCopy: "Kopiér adresse",
-              obsSaved: "Browserfil: %1",
-              autostart: "Start når capture-kortet tilsluttes", autostartHint: "En lille hjælper i baggrunden (starter med skrivebordet) åbner VeyAmux i fuldskærm, så snart det kort, du brugte sidst, dukker op.",
-              steamAdd: "Tilføj til Steam", steamHint: "Lægger VeyAmux i dit Steam-bibliotek som non-Steam-spil: det starter i fuldskærm på det sidste capture-kort, også fra Big Picture og Game Mode. Luk Steam først.",
-              hdrOut: "HDR-output (eksperimentel)",
-              gamescope: "Start i gamescope (HDR + VRR)",
-              gamescopeHint: "Kører VeyAmux i fuldskærm inde i gamescope, som giver HDR og adaptiv synkronisering selv gennem XWayland. Lossless Scaling bruges ikke inde i gamescope (dets lag støder sammen med gamescopes); AMD FSR 3.1 2× virker. Træder i kraft ved næste start.",
-              gamescopeOn: "Kører inde i gamescope.",
-              hdrOutOn: "HDR-skærm aktiv: HDR-kilder vises op til skærmens top-lysstyrke ovenfor, resten med 203 nits SDR-hvid.",
-              hdrOutNo: "Ingen HDR-swapchain: slå HDR til i systemets skærmindstillinger (KDE Plasma 6 / GNOME 48 eller nyere), og genstart VeyAmux.",
-              hdrOutRestart: "Træder i kraft, når VeyAmux genstartes.",
-              hdrOutSw: "VeyAmux kører med software-tegning (Vulkan kunne ikke starte), så der er ingen HDR-output.",
-              hdrOutX11: "VeyAmux kører gennem XWayland på dette system, og XWayland har ikke HDR. Start det direkte på Wayland (VEYAMUX_UI=vulkan med QT_QPA_PLATFORM=wayland) for at bruge HDR-output.",
-              overlayHint: "F3 skjuler · linje = billedtid (2 s), turkis = gennemsnit",
-              streamTitle: "Livestream", streamOwn: "Egen server", streamKey: "Stream-nøgle", streamStart: "Gå live", streamStop: "Stop stream",
-              streamHint: "Sender VeyAmux' billede og lyd direkte til Twitch, YouTube eller din egen RTMP-server (H.264, kodet på grafikkortet), uden OBS. Lossless Scalings mellembilleder kommer ikke med. Nøglen gemmes i VeyAmux' indstillingsfil.",
-              recTitle: "Instant replay og optagelse", recOff: "Instant replay er slået fra. F10 optager, F12 tager et skærmbillede.",
-              recReplayOn: "de sidste %1 s gemmes (F9 gemmer)", recLength: "Replay-længde", recRes: "Opløsning på optagelsen",
-              recSave: "Gem replay (F9)", recStart: "Optag (F10)", recStop: "Stop (F10)", recShot: "Skærmbillede (F12)", recFolder: "Mappe",
-              obsHelp: "I OBS: Kilder → + → Browser → sæt flueben i \"Lokal fil\" → vælg den gemte fil, og sæt bredde/højde til dit lærred (fx 1920 × 1080). Kun billedet sendes: tilføj lyden med programlyd-optagelse (Application Audio Capture → VeyAmux) eller direkte fra capture-kortet.",
-              lsPerf: "Ydelsestilstand (performance mode)",
-              fsrFgTitle: "Gratis (uden Lossless Scaling)", fsrFg: "AMD FSR 3.1 2× (gratis)",
-              fsrFgHint: "Open source frame generation inde i VeyAmux, til capture-kort: fordobler billedfrekvensen (60 → 120 fps). Bevægelsen beregnes ud fra billederne, så kvaliteten er under Lossless Scaling, og det rigtige billede vises et halvt billede senere.",
-              fgPaused: "Sat på pause automatisk: capture kører med ca. 120 Hz, så der laves ingen ekstra billeder. Starter igen under 80 fps.",
-              lsPerfHint: "Lettere Lossless Scaling-model: hurtigere, lidt lavere kvalitet. Flow scale sættes automatisk efter din opløsning (nu %1 %).",
-              lsFixed: "Fast 2× (fordobler)", lsFixedHint: "Fordobler altid billedfrekvensen (60 → 120 fps).",
-              ls3x: "Fast 3× (tredobler)", ls3xHint: "Tredobler altid billedfrekvensen (60 → 180 fps, 40 → 120 fps). Kræver en skærm, der er hurtig nok til resultatet.",
-              lsActive: "Aktiv via lsfg-vk. Lossless Scaling: %1", lsReady: "Lossless Scaling fundet: %1",
-              lsRestart: "VeyAmux skal genstartes for at slå Lossless Scaling til.",
-              lsNoInstall: "Lossless Scaling blev ikke fundet i dine Steam-biblioteker. Det skal købes og installeres via Steam.",
-              lsNoDll: "Kun Lossless.dll blev fundet. lsfg-vk 2 kræver lsfg-vk.dll: åbn Lossless Scaling i Steam → Egenskaber → Betaer, og vælg lsfg-vk-grenen.",
-              lsNoLayer: "lsfg-vk er ikke installeret. Installér det fra lsfg-vk.dev; VeyAmux bruger det til at køre Lossless Scaling på Linux.",
-              lsOldLayer: "Der blev fundet en ældre lsfg-vk (1.x). VeyAmux kræver lsfg-vk 2.0 eller nyere.",
-              lsNoVulkan: "Kræver Vulkan-visning; VeyAmux kører i software-tilstand.",
-              lsCrashed: "VeyAmux lukkede uventet, sidste gang det startede med Lossless Scaling, så det er slået fra.",
-              restartNow: "Genstart nu", tryAgain: "Prøv igen", chooseFolder: "Vælg mappe…", checkAgain: "Tjek igen" }
-    })
-    function t(k) { var s = strings[uiLanguage] || strings.en; return s[k] !== undefined ? s[k] : k }
+    // texts: Strings.js; player.language is the chosen language (follows the system unless one is picked)
+    function t(k) { var s = S.strings[player.language] || S.strings.en; if (s[k] !== undefined) return s[k]; return S.strings.en[k] !== undefined ? S.strings.en[k] : k }
     function fmt(sec) {
         sec = Math.max(0, Math.floor(sec))
         var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60
@@ -264,6 +110,28 @@ Window {
                         gradient: Gradient { orientation: Gradient.Horizontal
                             GradientStop { position: 0; color: pal.g0 } GradientStop { position: 1; color: pal.g1 } } }
                     MouseArea { id: thMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: player.theme = modelData }
+                }
+            }
+        }
+        // language picker: Auto follows the system
+        Item { width: 1; height: 4 }
+        Text { font.family: Theme.font; anchors.horizontalCenter: parent.horizontalCenter; text: t("language"); color: Theme.label; font.pixelSize: 13 }
+        Row {
+            anchors.horizontalCenter: parent.horizontalCenter
+            spacing: 6
+            Repeater {
+                model: ["auto"].concat(S.languages)
+                delegate: Rectangle {
+                    required property string modelData
+                    readonly property bool sel: player.languageChoice === modelData
+                    width: lgText.implicitWidth + 22; height: 30; radius: 15 * Theme.round
+                    color: sel ? Theme.accent : (lgMa.containsMouse ? Theme.surfaceHover : Theme.surface)
+                    gradient: sel ? Theme.sunset : null
+                    border.width: Theme.edge; border.color: "#000000"
+                    Text { id: lgText; font.family: Theme.font; anchors.centerIn: parent; font.pixelSize: 13
+                        text: modelData === "auto" ? t("langAuto") : S.names[modelData]
+                        color: parent.sel ? Theme.accentInk : Theme.text; font.weight: parent.sel ? Font.DemiBold : Font.Normal }
+                    MouseArea { id: lgMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: player.languageChoice = modelData }
                 }
             }
         }

@@ -134,11 +134,12 @@ foreach(f pq_video hdr_window)
 endforeach()
 qt_add_resources(veyamux "hdrshaders" PREFIX "/" FILES ${QSB_FILES})
 qt_add_resources(veyamux "qml" PREFIX "/" FILES
-  qml/qmldir qml/Theme.qml qml/Main.qml qml/CaptureDialog.qml qml/FrameGenSection.qml qml/ObsSection.qml qml/RecordSection.qml qml/IconButton.qml qml/VSlider.qml qml/Segmented.qml qml/ToggleSwitch.qml
+  qml/qmldir qml/Theme.qml qml/Strings.js qml/Main.qml qml/CaptureDialog.qml qml/FrameGenSection.qml qml/ObsSection.qml qml/RecordSection.qml qml/IconButton.qml qml/VSlider.qml qml/Segmented.qml qml/ToggleSwitch.qml
   qml/icons/capture.svg qml/icons/play.svg qml/icons/pause.svg qml/icons/volume.svg qml/icons/mute.svg qml/icons/fullscreen.svg
   qml/icons/exitfs.svg qml/icons/folder.svg qml/icons/sparkles.svg qml/icons/back10.svg qml/icons/fwd10.svg qml/icons/logo.svg
   qml/icons/logo-vice.svg qml/icons/logo-code.svg qml/icons/logo-inferno.svg qml/icons/logo-retro.svg
-  qml/fonts/PressStart2P-Regular.ttf qml/fonts/Cinzel-Variable.ttf)
+  qml/fonts/PressStart2P-Regular.ttf qml/fonts/Cinzel-Variable.ttf
+  i18n/messages.json)
 target_link_libraries(veyamux PRIVATE veyamux_media Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Widgets Qt6::Svg Qt6::Network Qt6::DBus)
 add_dependencies(veyamux veyamux_shaders)
 

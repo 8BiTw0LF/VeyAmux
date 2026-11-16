@@ -1,5 +1,9 @@
 #include "PlayerBridge.h"
 #include "PulseDevices.h"
+#include <cstring>
+#include <QLocale>
+#include <QJsonObject>
+#include <QJsonDocument>
 #include <QUrl>
 #include <QTimer>
 #include <QCoreApplication>
@@ -28,6 +32,7 @@ using veyamux::MediaEngine;
 PlayerBridge::PlayerBridge(const QString& shaderDir, QObject* parent)
     : QObject(parent), engine_(shaderDir.toStdString()), rec_(std::make_unique<veyamux::Recorder>()) {
     setTheme(QSettings().value("ui/theme", "vice").toString());
+    setLanguageChoice(QSettings().value("ui/lang", "auto").toString());
     rec_->onMessage = [this](const std::string& m, bool error) {
         const QString q = QString::fromStdString(m);
         QMetaObject::invokeMethod(this, [this, q, error] { onRecMessage(q, error); }, Qt::QueuedConnection);
@@ -859,6 +864,52 @@ QVariantList PlayerBridge::captureModes(const QString& path) {
     return out;
 }
 
+namespace {
+// i18n/messages.json: { "<language>": { "<English text>": "<translation>" } }
+const QJsonObject& messageTable() {
+    static const QJsonObject t = [] {
+        QFile f(QStringLiteral(":/i18n/messages.json"));
+        return f.open(QIODevice::ReadOnly) ? QJsonDocument::fromJson(f.readAll()).object() : QJsonObject();
+    }();
+    return t;
+}
+const QStringList kLanguages{"en", "da", "de", "es", "fr", "sv", "nb", "ru"};
+}
+
+QString PlayerBridge::L(const char* en, const char* da) const {
+    if (lang_ == "en") return QString::fromUtf8(en);
+    if (lang_ == "da" && std::strcmp(en, da) != 0) return QString::fromUtf8(da);
+    const QJsonValue v = messageTable().value(lang_).toObject().value(QString::fromUtf8(en));
+    return v.isString() ? v.toString() : QString::fromUtf8(lang_ == "da" ? da : en);
+}
+
+QString PlayerBridge::systemLanguage() {
+    // the system's language if VeyAmux has it, else English (Norwegian Nynorsk / "no" use Bokmål)
+    QStringList cands;
+    for (const char* var : {"LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"}) {
+        const QString v = qEnvironmentVariable(var);
+        if (!v.isEmpty()) for (const QString& part : v.split(':')) cands << part;
+    }
+    cands << QLocale::system().name();
+    for (QString c : cands) {
+        c = c.left(c.indexOf(QRegularExpression("[_.@-]")) < 0 ? c.size() : c.indexOf(QRegularExpression("[_.@-]"))).toLower();
+        if (c == "no" || c == "nn") c = "nb";
+        if (kLanguages.contains(c)) return c;
+        if (!c.isEmpty() && c != "c" && c != "posix") return "en";
+    }
+    return "en";
+}
+
+void PlayerBridge::setLanguageChoice(const QString& c) {
+    const QString choice = (c == "auto" || kLanguages.contains(c)) ? c : QStringLiteral("auto");
+    const QString use = choice == "auto" ? systemLanguage() : choice;
+    QSettings().setValue("ui/lang", choice);
+    if (choice == langChoice_ && use == lang_) return;
+    langChoice_ = choice;
+    lang_ = use;
+    emit languageChanged();
+}
+
 void PlayerBridge::setTheme(const QString& t) {
     static const QStringList known{"vice", "code", "inferno", "retro"};
     const QString v = known.contains(t) ? t : QStringLiteral("vice");
@@ -989,11 +1040,10 @@ bool PlayerBridge::openCaptureAuto(const QString& path) {
 
 // ------------------------------------------------------------------ frame generation / Lossless Scaling
 
-void PlayerBridge::setRunContext(bool vulkanUi, bool lsfgActive, bool lsfgCrashed, bool danish) {
+void PlayerBridge::setRunContext(bool vulkanUi, bool lsfgActive, bool lsfgCrashed) {
     vulkanUi_ = vulkanUi;
     lsfgActive_ = lsfgActive;
     lsfgCrashed_ = lsfgCrashed;
-    danish_ = danish;
     refreshLsfg();
     if (lsfgActive_) {
         lsfgMultiplier_ = s_.frameGen == veyamux::FrameGenMode::LsfgFixed3 ? 3 : (s_.lsfgFg() ? 2 : 1);
@@ -1109,44 +1159,45 @@ void PlayerBridge::restartApp() {
 }
 
 QString PlayerBridge::translateMessage(const QString& msg) const {
-    if (!danish_ || msg.isEmpty()) return msg;
-    static const std::pair<const char*, const char*> table[] = {
-        {"Audio unavailable: ", "Lyd utilgængelig: "},
-        {"Capture audio unavailable: ", "Capture-lyd utilgængelig: "},
-        {"Audio output unavailable: ", "Lydudgang utilgængelig: "},
-        {"No signal from the capture card", "Intet signal fra capture-kortet"},
-        {"Capture card lost, reconnecting...", "Capture-kortet forsvandt – forbinder igen …"},
-        {"Capture device disconnected", "Capture-enheden blev frakoblet"},
-        {"Vulkan unavailable: ", "Vulkan utilgængelig: "},
-        {"Could not set up the enhancement chain: ", "Kunne ikke starte forbedringskæden: "},
-        {"GPU error, falling back to passthrough: ", "GPU-fejl, viser uden forbedring: "},
-        {"GPU enhancement disabled (VEYAMUX_NO_GPU=1)", "GPU-forbedring slået fra (VEYAMUX_NO_GPU=1)"},
-        {"Read error: ", "Læsefejl: "},
-        {"Could not open the file: ", "Kunne ikke åbne filen: "},
-        {"Could not read stream info: ", "Kunne ikke læse streaminformation: "},
-        {"The file contains no playable audio or video", "Filen indeholder ingen lyd eller video, der kan afspilles"},
-        {"No decoder for the video stream", "Ingen dekoder til videostrømmen"},
-        {"Could not open the video decoder: ", "Kunne ikke åbne videodekoderen: "},
-        {"Could not open ", "Kunne ikke åbne "},
-        {"The device refused pixel format ", "Enheden afviste pixelformatet "},
-        {"The device does not support memory-mapped streaming", "Enheden understøtter ikke memory-mapped streaming"},
-        {"Out of GPU memory for FSR upscaling", "Ikke nok GPU-hukommelse til FSR-opskalering"},
-        {"Out of GPU memory", "Ikke nok GPU-hukommelse"},
-        {"The capture device is in use by another program", "Capture-kortet bruges af et andet program"},
-        {"Live path unavailable", "GPU-direkte visning utilgængelig"},
-        {"The shared window was closed", "Det delte vindue blev lukket"},
-        {"The screen share sends no picture", "Skærmdelingen sender intet billede"},
-        {"The screen share portal (xdg-desktop-portal) is not running", "Skærmdelings-portalen (xdg-desktop-portal) kører ikke"},
-        {"Screen share portal: ", "Skærmdelings-portal: "},
-        {"Screen share error: ", "Skærmdelingsfejl: "},
-        {"Nothing was picked to share", "Der blev ikke valgt noget at dele"},
-        {"The screen share was not started", "Skærmdelingen blev ikke startet"},
-        {"PipeWire (libpipewire-0.3.so.0) was not found", "PipeWire (libpipewire-0.3.so.0) blev ikke fundet"},
-        {"PipeWire: ", "PipeWire: "},
+    if (lang_ == "en" || msg.isEmpty()) return msg;
+    // messages from the engine start with one of these English texts; the rest (a path, a reason) is kept
+    static const char* const prefixes[] = {
+        "Audio unavailable: ",
+        "Capture audio unavailable: ",
+        "Audio output unavailable: ",
+        "No signal from the capture card",
+        "Capture card lost, reconnecting...",
+        "Capture device disconnected",
+        "Vulkan unavailable: ",
+        "Could not set up the enhancement chain: ",
+        "GPU error, falling back to passthrough: ",
+        "GPU enhancement disabled (VEYAMUX_NO_GPU=1)",
+        "Read error: ",
+        "Could not open the file: ",
+        "Could not read stream info: ",
+        "The file contains no playable audio or video",
+        "No decoder for the video stream",
+        "Could not open the video decoder: ",
+        "Could not open ",
+        "The device refused pixel format ",
+        "The device does not support memory-mapped streaming",
+        "Out of GPU memory for FSR upscaling",
+        "Out of GPU memory",
+        "The capture device is in use by another program",
+        "Live path unavailable",
+        "The shared window was closed",
+        "The screen share sends no picture",
+        "The screen share portal (xdg-desktop-portal) is not running",
+        "Screen share portal: ",
+        "Screen share error: ",
+        "Nothing was picked to share",
+        "The screen share was not started",
+        "PipeWire (libpipewire-0.3.so.0) was not found",
+        "PipeWire: ",
     };
-    for (const auto& [en, da] : table) {
+    for (const char* en : prefixes) {
         const QString e = QString::fromUtf8(en);
-        if (msg.startsWith(e)) return QString::fromUtf8(da) + msg.mid(e.size());
+        if (msg.startsWith(e)) return L(en, en) + msg.mid(e.size());
     }
     return msg;
 }
