@@ -214,7 +214,16 @@ missing, use `APPIMAGE_EXTRACT_AND_RUN=1 ./VeyAmux-x86_64.AppImage`.
 
 Press **C** (or **Capture**) to choose a capture card, window or screen. Press **P** (or ✨) for the menu.
 
-**Or as a Flatpak:**
+**Or as a Flatpak, with updates through Discover / GNOME Software** (VeyAmux' own Flatpak repository):
+
+```sh
+flatpak remote-add --user --if-not-exists veyamux https://8bitw0lf.github.io/VeyAmux/veyamux.flatpakrepo
+flatpak install --user veyamux io.github._8BiTw0LF.VeyAmux
+```
+
+See [8bitw0lf.github.io/VeyAmux](https://8bitw0lf.github.io/VeyAmux/) for a one-click install.
+
+**Or as a single Flatpak file** (no automatic updates):
 1. Download `VeyAmux-x86_64.flatpak` from the same release.
 2. Install and start it:
 
