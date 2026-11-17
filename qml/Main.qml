@@ -18,6 +18,7 @@ Window {
 
     readonly property bool fs: visibility === Window.FullScreen
     property bool panelOpen: startPanel
+    onPanelOpenChanged: if (panelOpen) player.demoRelease()   // the demo stops swimming while the menu is open
     property bool controlsShown: true
     property bool scrubbing: false
     property real scrubValue: 0
@@ -84,6 +85,33 @@ Window {
             }
         }
         Text { font.family: Theme.font; anchors.horizontalCenter: parent.horizontalCenter; text: t("hint"); color: Theme.muted; font.pixelSize: 14 }
+        // demo scene: try every feature without a capture card
+        Column {
+            visible: player.demoAvailable
+            anchors.horizontalCenter: parent.horizontalCenter
+            spacing: 8
+            Item { width: 1; height: 4 }
+            Text { font.family: Theme.font; anchors.horizontalCenter: parent.horizontalCenter; text: t("demoTitle"); color: Theme.label; font.pixelSize: 15; font.weight: Font.DemiBold }
+            Text { font.family: Theme.font; anchors.horizontalCenter: parent.horizontalCenter; width: 540; horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap; text: t("demoHint"); color: Theme.muted; font.pixelSize: 13 }
+            Row {
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: 10
+                Repeater {
+                    model: [30, 60]
+                    delegate: Rectangle {
+                        required property int modelData
+                        width: 132; height: 38; radius: 19 * Theme.round
+                        color: dmMa.containsMouse ? Theme.surfaceHover : Theme.surface; border.color: Theme.accentLine
+                        border.width: Math.max(1, Theme.edge)
+                        Rectangle { visible: Theme.edge > 0; x: 2; y: parent.height - 6; width: parent.width - 4; height: 4; color: "#59000000" }
+                        Text { font.family: Theme.headCaps ? Theme.headFont : Theme.font; anchors.centerIn: parent; text: "Demo · " + modelData + " fps"; color: Theme.text
+                            font.pixelSize: Theme.headCaps ? 10 : 14; font.weight: Font.DemiBold; font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase }
+                        MouseArea { id: dmMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: player.openDemo(modelData) }
+                    }
+                }
+            }
+        }
         // theme picker: each chip shows the theme's own colours and logo
         Item { width: 1; height: 10 }
         Text { font.family: Theme.font; anchors.horizontalCenter: parent.horizontalCenter; text: t("theme"); color: Theme.label; font.pixelSize: 13 }
@@ -137,16 +165,32 @@ Window {
         }
     }
 
-    // Click / hover / double-click on the video
+    // Click / hover / double-click on the video; in the demo scene, dragging looks around
     MouseArea {
         anchors.fill: parent
         hoverEnabled: true
         acceptedButtons: Qt.LeftButton
         enabled: player.hasMedia
-        cursorShape: (win.controlsShown || !win.fs) ? Qt.ArrowCursor : Qt.BlankCursor
-        onPositionChanged: wake()
-        onClicked: { player.togglePlay(); wake() }
-        onDoubleClicked: { player.togglePlay(); win.visibility = fs ? Window.Windowed : Window.FullScreen }
+        property real lx: 0
+        property real ly: 0
+        cursorShape: player.demoActive && pressed ? Qt.ClosedHandCursor : (win.controlsShown || !win.fs) ? Qt.ArrowCursor : Qt.BlankCursor
+        onPressed: (m) => { lx = m.x; ly = m.y }
+        onPositionChanged: (m) => {
+            wake()
+            if (pressed && player.demoActive) { player.demoLook(m.x - lx, m.y - ly); lx = m.x; ly = m.y }
+        }
+        onClicked: { if (!player.demoActive) player.togglePlay(); wake() }
+        onDoubleClicked: { if (!player.demoActive) player.togglePlay(); win.visibility = fs ? Window.Windowed : Window.FullScreen }
+    }
+
+    // demo scene: how to swim (while the controls are shown)
+    Rectangle {
+        visible: player.demoActive && player.demoProgress >= 1 && win.controlsShown && !win.panelOpen
+        anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: 96 }
+        width: Math.min(parent.width - 40, demoKeysText.implicitWidth + 32); height: demoKeysText.implicitHeight + 16
+        radius: 10 * Theme.round; color: Theme.overlay
+        Text { id: demoKeysText; anchors.centerIn: parent; width: parent.width - 32; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap
+            font.family: Theme.font; font.pixelSize: 13; color: Theme.text; text: t("demoKeys") }
     }
 
     DropArea {
@@ -811,7 +855,21 @@ Window {
         id: keyRoot
         anchors.fill: parent
         focus: true
+        // demo scene: W A S D Q E Shift swim, 1-6 viewpoints (while the menu is closed)
+        function demoKeyName(k) {
+            switch (k) {
+            case Qt.Key_W: return "w"; case Qt.Key_A: return "a"; case Qt.Key_S: return "s"; case Qt.Key_D: return "d"
+            case Qt.Key_Q: return "q"; case Qt.Key_E: return "e"; case Qt.Key_Shift: return "shift"
+            }
+            return ""
+        }
+        Keys.onReleased: (e) => { const k = demoKeyName(e.key); if (k !== "" && !e.isAutoRepeat && player.demoActive) { player.demoKey(k, false); e.accepted = true } }
         Keys.onPressed: (e) => {
+            if (player.demoActive && !win.panelOpen && !capDlg.visible && !(e.modifiers & (Qt.ControlModifier | Qt.AltModifier))) {
+                const k = demoKeyName(e.key)
+                if (k !== "") { if (!e.isAutoRepeat) player.demoKey(k, true); e.accepted = true; return }
+                if (e.key >= Qt.Key_1 && e.key <= Qt.Key_6) { player.demoPose(e.key - Qt.Key_1); e.accepted = true; return }
+            }
             if (e.key >= Qt.Key_1 && e.key <= Qt.Key_9 && !(e.modifiers & (Qt.ControlModifier | Qt.AltModifier))) {
                 player.loadProfileIndex(e.key - Qt.Key_1); e.accepted = true; return
             }

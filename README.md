@@ -68,6 +68,17 @@ needed for its own frame generation**, and everything else works without it:
 ## Features
 
 ### Sources
+- **Built-in demo (no capture card needed)**: *Demo · 30 fps* or *Demo · 60 fps* on the start screen starts
+  **Abyssal Garden**, an underwater world with kelp forests, light shafts, a shipwreck and manta rays. It is rendered live
+  in 1080p on your graphics card and goes through VeyAmux exactly like a console's picture. So upscaling, noise
+  reduction, Retro TV, frame generation, recording and streaming can all be tried on a moving 3D scene.
+  - **Swim:** **W A S D**, **Q / E** down / up, **Shift** faster.
+  - **Look around:** drag with the mouse.
+  - **Viewpoints:** **1–6**.
+  - **Controller:** sticks to swim and look, triggers for down / up, **Y** for the next viewpoint.
+  - **Menu:** **P** or **Select + Start** opens it, and the game stops while it is open.
+
+  The first start builds the world, which takes a few seconds.
 - **Capture cards** (V4L2 / UVC): every mode the card offers (NV12, YUYV, UYVY, P010 HDR, I420, RGB, MJPEG), the best
   one marked with ★. If the card drops out, or stalls when the console changes resolution, refresh rate or HDR,
   VeyAmux reconnects by itself.

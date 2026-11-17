@@ -41,6 +41,10 @@ signals:
     void menuCombo();
     // menu navigation (repeats while held): "up", "down", "left", "right", "a", "b", "lb", "rb"
     void button(const QString& name);
+    // while the menu is closed (for the demo scene): sticks -1..1, triggers 0..1 (bumpers count as triggers),
+    // left stick click; and "y" pressed
+    void analog(double lx, double ly, double rx, double ry, double lt, double rt, bool fast);
+    void freeButton(const QString& name);
 
 private:
     struct Pad {
@@ -48,7 +52,8 @@ private:
         QString name, path;
         std::unique_ptr<QSocketNotifier> notifier;
         bool test = false;               // VEYAMUX_TEST_PAD_FIFO: raw events from a pipe, no ioctls
-        int absMin[2]{-32768, -32768}, absMax[2]{32767, 32767};
+        // ABS_X, ABS_Y, ABS_RX, ABS_RY, ABS_Z, ABS_RZ
+        int absMin[6]{-32768, -32768, -32768, -32768, 0, 0}, absMax[6]{32767, 32767, 32767, 32767, 255, 255};
         bool grabbedNow = false;
     };
     void scan();
@@ -75,6 +80,10 @@ private:
     QString heldDir_;                    // direction being repeated
     bool stickDir_[4]{};                 // left stick as directions: up, down, left, right
     bool hatDir_[4]{};
+    double axis_[6]{};                   // lx, ly, rx, ry, lt, rt (normalised)
+    bool trigBtn_[4]{};                  // BTN_TL2, BTN_TR2, BTN_TL, BTN_TR
+    bool thumbL_ = false;
+    void emitAnalog();
 };
 
 } // namespace veyamux

@@ -12,6 +12,7 @@
 #include <QLocale>
 #include <QProcess>
 #include "Sandbox.h"
+#include "DemoSource.h"
 #include "Watcher.h"
 #include <cstring>
 #include <QQmlApplicationEngine>
@@ -293,6 +294,11 @@ int main(int argc, char** argv) {
     veyamux::GamepadInput gamepad;   // controllers for the menu (Select + Start); outlives the QML engine
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty("gamepad", &gamepad);
+    // the demo scene swims with the controller while the menu is closed; Y jumps to the next viewpoint
+    QObject::connect(&gamepad, &veyamux::GamepadInput::analog, &player, &PlayerBridge::demoPad);
+    QObject::connect(&gamepad, &veyamux::GamepadInput::freeButton, &player, [&player](const QString& b) {
+        if (b == "y" && player.demoActive()) player.demoPose(-1);
+    });
     engine.rootContext()->setContextProperty("player", &player);
     engine.rootContext()->setContextProperty("startPanel", startPanel);
     engine.rootContext()->setContextProperty("startDialog", startDialog);
@@ -452,6 +458,7 @@ int main(int argc, char** argv) {
     // would keep the capture card open and block the next start. Settings are already saved at this point.
     QObject::connect(&app, &QCoreApplication::aboutToQuit, [&player] {
         player.shutdown();
+        veyamux::demo::shutdown();   // the demo scene's render thread
         std::thread([] { std::this_thread::sleep_for(std::chrono::seconds(4)); _exit(0); }).detach();
     });
     return app.exec();

@@ -9,6 +9,7 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cerrno>
 #include <cstring>
 
@@ -87,11 +88,12 @@ void GamepadInput::addPad(const QString& path, bool test) {
         char name[128]{};
         ioctl(fd, EVIOCGNAME(sizeof name - 1), name);
         p->name = QString::fromUtf8(name).trimmed();
-        for (int a : {ABS_X, ABS_Y}) {
+        const int axes[6] = {ABS_X, ABS_Y, ABS_RX, ABS_RY, ABS_Z, ABS_RZ};
+        for (int i = 0; i < 6; i++) {
             input_absinfo info{};
-            if (ioctl(fd, EVIOCGABS(a), &info) == 0 && info.maximum > info.minimum) {
-                p->absMin[a == ABS_Y] = info.minimum;
-                p->absMax[a == ABS_Y] = info.maximum;
+            if (ioctl(fd, EVIOCGABS(axes[i]), &info) == 0 && info.maximum > info.minimum) {
+                p->absMin[i] = info.minimum;
+                p->absMax[i] = info.maximum;
             }
         }
     } else {
@@ -138,10 +140,22 @@ void GamepadInput::readPad(Pad& p) {
                     const int a = x ? 2 : 0;   // up/down = 0/1, left/right = 2/3
                     if (hatDir_[a] != neg) { hatDir_[a] = neg; setDir(x ? "left" : "up", neg); }
                     if (hatDir_[a + 1] != pos) { hatDir_[a + 1] = pos; setDir(x ? "right" : "down", pos); }
+                } else if (e.code == ABS_RX || e.code == ABS_RY || e.code == ABS_Z || e.code == ABS_RZ) {
+                    const int i = e.code == ABS_RX ? 2 : e.code == ABS_RY ? 3 : e.code == ABS_Z ? 4 : 5;
+                    if (i < 4) {
+                        const double mid = (p.absMin[i] + p.absMax[i]) / 2.0, half = (p.absMax[i] - p.absMin[i]) / 2.0;
+                        axis_[i] = half > 0 ? std::clamp((e.value - mid) / half, -1.0, 1.0) : 0;
+                    } else {
+                        const double range = p.absMax[i] - p.absMin[i];
+                        axis_[i] = range > 0 ? std::clamp((e.value - p.absMin[i]) / range, 0.0, 1.0) : 0;
+                    }
+                    emitAnalog();
                 } else if (e.code == ABS_X || e.code == ABS_Y) {
                     const int ax = e.code == ABS_Y;
                     const double mid = (p.absMin[ax] + p.absMax[ax]) / 2.0, half = (p.absMax[ax] - p.absMin[ax]) / 2.0;
                     const double v = half > 0 ? (e.value - mid) / half : 0;
+                    axis_[ax] = std::clamp(v, -1.0, 1.0);
+                    emitAnalog();
                     const int a = ax ? 0 : 2;
                     const bool neg = v < -0.6, pos = v > 0.6;
                     if (stickDir_[a] != neg) { stickDir_[a] = neg; setDir(ax ? "up" : "left", neg); }
@@ -176,8 +190,12 @@ void GamepadInput::onKey(int code, bool down) {
     case BTN_DPAD_RIGHT: setDir("right", down); return;
     case BTN_SOUTH: if (down && wantGrab_) emit button("a"); return;
     case BTN_EAST: if (down && wantGrab_) emit button("b"); return;
-    case BTN_TL: if (down && wantGrab_) emit button("lb"); return;
-    case BTN_TR: if (down && wantGrab_) emit button("rb"); return;
+    case BTN_TL: trigBtn_[2] = down; if (down && wantGrab_) emit button("lb"); emitAnalog(); return;
+    case BTN_TR: trigBtn_[3] = down; if (down && wantGrab_) emit button("rb"); emitAnalog(); return;
+    case BTN_TL2: trigBtn_[0] = down; emitAnalog(); return;
+    case BTN_TR2: trigBtn_[1] = down; emitAnalog(); return;
+    case BTN_THUMBL: thumbL_ = down; emitAnalog(); return;
+    case BTN_NORTH: if (down && !wantGrab_) emit freeButton("y"); return;
     default: return;
     }
     if (select_ && start_ && !comboFired_) { comboFired_ = true; emit menuCombo(); }
@@ -185,6 +203,13 @@ void GamepadInput::onKey(int code, bool down) {
         comboFired_ = false;
         applyGrab();   // a grab or release that waited for the combination to be let go
     }
+}
+
+void GamepadInput::emitAnalog() {
+    if (wantGrab_) return;   // the menu has the controller
+    const double lt = std::max({axis_[4], trigBtn_[0] ? 1.0 : 0.0, trigBtn_[2] ? 1.0 : 0.0});
+    const double rt = std::max({axis_[5], trigBtn_[1] ? 1.0 : 0.0, trigBtn_[3] ? 1.0 : 0.0});
+    emit analog(axis_[0], axis_[1], axis_[2], axis_[3], lt, rt, thumbL_);
 }
 
 void GamepadInput::setDir(const QString& dir, bool down) {
@@ -203,6 +228,7 @@ void GamepadInput::setGrabbed(bool g) {
     if (g == wantGrab_) return;
     wantGrab_ = g;
     if (!g) { heldDir_.clear(); repeat_.stop(); }
+    if (g) emit analog(0, 0, 0, 0, 0, 0, false);   // the demo stops swimming while the menu is open
     applyGrab();
     emit grabbedChanged();
 }

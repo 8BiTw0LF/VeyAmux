@@ -104,7 +104,7 @@ add_dependencies(veyamux-selftest veyamux_shaders)
 # ---- Media engine (FFmpeg + PulseAudio/PipeWire), still Qt-free ----
 pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavformat libavcodec libavutil libswscale libswresample)
 pkg_check_modules(PULSE REQUIRED IMPORTED_TARGET libpulse-simple libpulse)
-add_library(veyamux_media STATIC src/MediaEngine.cpp src/CaptureSource.cpp src/ContentProbe.cpp src/Recorder.cpp src/ScreenCast.cpp src/PulseDevices.cpp src/AudioMeter.cpp)
+add_library(veyamux_media STATIC src/MediaEngine.cpp src/CaptureSource.cpp src/DemoSource.cpp src/ContentProbe.cpp src/Recorder.cpp src/ScreenCast.cpp src/PulseDevices.cpp src/AudioMeter.cpp)
 target_include_directories(veyamux_media PUBLIC src)
 # PipeWire (window/screen source): headers only, libpipewire-0.3 is loaded from the system at run time
 pkg_check_modules(PIPEWIRE REQUIRED libpipewire-0.3)
@@ -115,6 +115,27 @@ find_package(Threads REQUIRED)
 add_executable(veyamux-play-test src/play_test.cpp)
 target_link_libraries(veyamux-play-test PRIVATE veyamux_media)
 add_dependencies(veyamux-play-test veyamux_shaders)
+
+# ---- Demo scene "Abyssal Garden" (WebGPU through wgpu-native, prebuilt: scripts/fetch-tools.sh) ----
+set(VEYAMUX_WGPU_ROOT "${CMAKE_SOURCE_DIR}/.tools/wgpu" CACHE PATH "wgpu-native release (include/, lib/)")
+if(EXISTS "${VEYAMUX_WGPU_ROOT}/lib/libwgpu_native.a")
+  file(GLOB ABYSSAL_WGSL "${CMAKE_SOURCE_DIR}/src/abyssal/wgsl/*.wgsl")
+  set(ABYSSAL_WGSL_H "${CMAKE_BINARY_DIR}/generated/abyssal_wgsl.h")
+  add_custom_command(OUTPUT "${ABYSSAL_WGSL_H}"
+    COMMAND ${CMAKE_COMMAND} -DDIR=${CMAKE_SOURCE_DIR}/src/abyssal/wgsl -DOUT=${ABYSSAL_WGSL_H} -P ${CMAKE_SOURCE_DIR}/cmake/embed_wgsl.cmake
+    DEPENDS ${ABYSSAL_WGSL} "${CMAKE_SOURCE_DIR}/cmake/embed_wgsl.cmake" VERBATIM)
+  add_library(veyamux_abyssal STATIC src/abyssal/AbyssalMath.cpp src/abyssal/AbyssalWorld.cpp src/abyssal/AbyssalScene.cpp
+    src/abyssal/AbyssalAudio.cpp "${ABYSSAL_WGSL_H}")
+  target_include_directories(veyamux_abyssal PUBLIC src/abyssal PRIVATE "${CMAKE_BINARY_DIR}/generated" "${VEYAMUX_WGPU_ROOT}/include")
+  target_link_libraries(veyamux_abyssal PRIVATE "${VEYAMUX_WGPU_ROOT}/lib/libwgpu_native.a" ${CMAKE_DL_LIBS} Threads::Threads m)
+  target_compile_definitions(veyamux_abyssal PUBLIC VEYAMUX_HAVE_ABYSSAL=1)
+  add_executable(veyamux-abyssal-test src/abyssal/abyssal_test.cpp)
+  target_link_libraries(veyamux-abyssal-test PRIVATE veyamux_abyssal)
+  target_link_libraries(veyamux_media PUBLIC veyamux_abyssal)
+  message(STATUS "Abyssal Garden demo: wgpu-native from ${VEYAMUX_WGPU_ROOT}")
+else()
+  message(WARNING "wgpu-native not found in ${VEYAMUX_WGPU_ROOT}: the demo scene is left out (scripts/fetch-tools.sh fetches it)")
+endif()
 
 # ---- Application (Qt 6 / QML) ----
 find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Qml Quick Widgets Svg Network DBus)

@@ -16,6 +16,7 @@
       <li>Instant replay, recording, screenshots and live streaming to Twitch or YouTube with hardware encoding</li>
       <li>OBS browser source, window and screen capture</li>
       <li>Menu control with a game controller, without the game reacting to it</li>
+      <li>A built-in demo scene (Abyssal Garden, an underwater world rendered live in 1080p) to try everything without a capture card</li>
       <li>Themes and eight languages</li>
     </ul>
     <p>Based on Veyra-NRVideo by Likely7.</p>

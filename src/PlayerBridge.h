@@ -28,6 +28,10 @@
 class PlayerBridge : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool hasMedia READ hasMedia NOTIFY mediaChanged)
+    // the demo scene (DemoSource.h): available in this build, running as the source, and how far its world is built
+    Q_PROPERTY(bool demoAvailable READ demoAvailable CONSTANT)
+    Q_PROPERTY(bool demoActive READ demoActive NOTIFY mediaChanged)
+    Q_PROPERTY(double demoProgress READ demoProgress NOTIFY demoChanged)
     Q_PROPERTY(bool live READ live NOTIFY mediaChanged)
     Q_PROPERTY(bool playing READ playing NOTIFY playingChanged)
     Q_PROPERTY(double position READ position NOTIFY positionChanged)
@@ -145,6 +149,9 @@ public:
     ~PlayerBridge() override;
 
     bool hasMedia() const { return engine_.isOpen(); }
+    bool demoAvailable() const;
+    bool demoActive() const { return demoActive_ && engine_.isOpen(); }
+    double demoProgress() const { return demoProgress_; }
     bool live() const { return engine_.isLive(); }
     bool playing() const { return engine_.playing(); }
     double position() const { return engine_.isOpen() ? engine_.position() : 0.0; }
@@ -383,8 +390,16 @@ public slots:
     void retryLsfg();
     void refreshLsfg();
     void chooseLsfgFolder();
+    // demo scene: start it at 30 or 60 fps; keyboard / mouse / controller input while the menu is closed
+    void openDemo(int fps);
+    void demoKey(const QString& key, bool down);   // "w" "a" "s" "d" "q" "e" "shift"
+    void demoLook(double dx, double dy);
+    void demoPose(int pose);                       // -1: the next viewpoint
+    void demoRelease();
+    void demoPad(double lx, double ly, double rx, double ry, double lt, double rt, bool fast);
 
 signals:
+    void demoChanged();
     void languageChanged();
     void themeChanged();
     void audioMeterChanged();
@@ -428,6 +443,9 @@ private:
     bool muted_ = false;
     QString gpuName_, status_, perf_;
     bool lastPlaying_ = false;
+    bool demoActive_ = false;
+    double demoProgress_ = 0;
+    int demoPose_ = 0;
     std::vector<veyamux::CaptureMode> lastModes_;
     veyamux::AudioMeter meter_;
     QString theme_;

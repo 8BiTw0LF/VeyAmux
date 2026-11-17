@@ -84,7 +84,13 @@
   "noise red.": "støjred.",
   "upscale": "opskal.",
   "● LIVE %1:%2": "● LIVE %1:%2",
-  "● REC %1:%2": "● OPTAGER %1:%2"
+  "● REC %1:%2": "● OPTAGER %1:%2",
+  "Building the underwater world": "Bygger undervandsverdenen",
+  "This build has no demo scene": "Denne udgave har ingen demo",
+  "Added to Steam: if Steam was open, close it and press the button again": "Tilføjet til Steam: hvis Steam var åben, så luk den og tryk på knappen igen",
+  "No Vulkan graphics card for the demo": "Intet Vulkan-grafikkort til demoen",
+  "The graphics card refused the demo's device": "Grafikkortet afviste demoens enhed",
+  "The demo's graphics device was lost": "Demoens grafikenhed gik tabt"
  },
  "de": {
   " (CPU)": " (CPU)",
@@ -171,7 +177,13 @@
   "noise red.": "Rauschunt.",
   "upscale": "Skalier.",
   "● LIVE %1:%2": "● LIVE %1:%2",
-  "● REC %1:%2": "● REC %1:%2"
+  "● REC %1:%2": "● REC %1:%2",
+  "Building the underwater world": "Die Unterwasserwelt wird gebaut",
+  "This build has no demo scene": "Diese Version enthält keine Demo",
+  "Added to Steam: if Steam was open, close it and press the button again": "Zu Steam hinzugefügt: Falls Steam offen war, schließe es und drücke die Taste erneut",
+  "No Vulkan graphics card for the demo": "Keine Vulkan-Grafikkarte für die Demo",
+  "The graphics card refused the demo's device": "Die Grafikkarte hat das Gerät der Demo abgelehnt",
+  "The demo's graphics device was lost": "Das Grafikgerät der Demo ging verloren"
  },
  "es": {
   " (CPU)": " (CPU)",
@@ -258,7 +270,13 @@
   "noise red.": "ruido",
   "upscale": "escalado",
   "● LIVE %1:%2": "● EN DIRECTO %1:%2",
-  "● REC %1:%2": "● REC %1:%2"
+  "● REC %1:%2": "● REC %1:%2",
+  "Building the underwater world": "Construyendo el mundo submarino",
+  "This build has no demo scene": "Esta versión no incluye la demo",
+  "Added to Steam: if Steam was open, close it and press the button again": "Añadido a Steam: si Steam estaba abierto, ciérralo y pulsa el botón otra vez",
+  "No Vulkan graphics card for the demo": "No hay tarjeta gráfica Vulkan para la demo",
+  "The graphics card refused the demo's device": "La tarjeta gráfica rechazó el dispositivo de la demo",
+  "The demo's graphics device was lost": "Se perdió el dispositivo gráfico de la demo"
  },
  "fr": {
   " (CPU)": " (CPU)",
@@ -345,7 +363,13 @@
   "noise red.": "bruit",
   "upscale": "échelle",
   "● LIVE %1:%2": "● DIRECT %1:%2",
-  "● REC %1:%2": "● REC %1:%2"
+  "● REC %1:%2": "● REC %1:%2",
+  "Building the underwater world": "Construction du monde sous-marin",
+  "This build has no demo scene": "Cette version n'inclut pas la démo",
+  "Added to Steam: if Steam was open, close it and press the button again": "Ajouté à Steam : si Steam était ouvert, fermez-le et appuyez à nouveau sur le bouton",
+  "No Vulkan graphics card for the demo": "Aucune carte graphique Vulkan pour la démo",
+  "The graphics card refused the demo's device": "La carte graphique a refusé le périphérique de la démo",
+  "The demo's graphics device was lost": "Le périphérique graphique de la démo a été perdu"
  },
  "nb": {
   " (CPU)": " (CPU)",
@@ -432,7 +456,13 @@
   "noise red.": "støyred.",
   "upscale": "oppskal.",
   "● LIVE %1:%2": "● DIREKTE %1:%2",
-  "● REC %1:%2": "● OPPTAK %1:%2"
+  "● REC %1:%2": "● OPPTAK %1:%2",
+  "Building the underwater world": "Bygger undervannsverdenen",
+  "This build has no demo scene": "Denne versjonen har ingen demo",
+  "Added to Steam: if Steam was open, close it and press the button again": "Lagt til i Steam: hvis Steam var åpen, lukk den og trykk på knappen igjen",
+  "No Vulkan graphics card for the demo": "Ingen Vulkan-skjermkort for demoen",
+  "The graphics card refused the demo's device": "Skjermkortet avviste demoens enhet",
+  "The demo's graphics device was lost": "Demoens grafikkenhet gikk tapt"
  },
  "ru": {
   " (CPU)": " (CPU)",
@@ -519,7 +549,13 @@
   "noise red.": "шумопод.",
   "upscale": "масшт.",
   "● LIVE %1:%2": "● ЭФИР %1:%2",
-  "● REC %1:%2": "● ЗАПИСЬ %1:%2"
+  "● REC %1:%2": "● ЗАПИСЬ %1:%2",
+  "Building the underwater world": "Создаётся подводный мир",
+  "This build has no demo scene": "В этой сборке нет демо",
+  "Added to Steam: if Steam was open, close it and press the button again": "Добавлено в Steam: если Steam был открыт, закройте его и нажмите кнопку ещё раз",
+  "No Vulkan graphics card for the demo": "Нет видеокарты Vulkan для демо",
+  "The graphics card refused the demo's device": "Видеокарта отклонила устройство демо",
+  "The demo's graphics device was lost": "Графическое устройство демо потеряно"
  },
  "sv": {
   " (CPU)": " (CPU)",
@@ -606,6 +642,12 @@
   "noise red.": "brusred.",
   "upscale": "uppskal.",
   "● LIVE %1:%2": "● LIVE %1:%2",
-  "● REC %1:%2": "● SPELAR IN %1:%2"
+  "● REC %1:%2": "● SPELAR IN %1:%2",
+  "Building the underwater world": "Bygger undervattensvärlden",
+  "This build has no demo scene": "Den här versionen har ingen demo",
+  "Added to Steam: if Steam was open, close it and press the button again": "Tillagt i Steam: om Steam var öppet, stäng det och tryck på knappen igen",
+  "No Vulkan graphics card for the demo": "Inget Vulkan-grafikkort för demon",
+  "The graphics card refused the demo's device": "Grafikkortet avvisade demons enhet",
+  "The demo's graphics device was lost": "Demons grafikenhet förlorades"
  }
 }

@@ -90,11 +90,28 @@ modules:
         sha256: b99655f65215287825fcdd49102b17e2a1608eff79ffaf9457514c2676892aa5
         strip-components: 0
 
+  # wgpu-native: WebGPU on Vulkan for the demo scene (linked statically; only used while building)
+  - name: wgpu-native
+    buildsystem: simple
+    only-arches:
+      - x86_64
+    build-commands:
+      - mkdir -p /app/lib/wgpu
+      - cp -a include lib /app/lib/wgpu/
+    cleanup:
+      - /lib/wgpu
+    sources:
+      - type: archive
+        url: https://github.com/gfx-rs/wgpu-native/releases/download/v29.0.0.0/wgpu-linux-x86_64-release.zip
+        sha256: cf614af80f23c6364a13f6569e7ae4ca7367ebf6062e3d3d6e80e205264636b4
+        strip-components: 0
+
   - name: veyamux
     buildsystem: cmake-ninja
     config-opts:
       - -DCMAKE_BUILD_TYPE=Release
       - -DVEYAMUX_DXC_ROOT=/app/lib/dxc
+      - -DVEYAMUX_WGPU_ROOT=/app/lib/wgpu
     post-install:
       # Flathub's metadata (id, screenshots, content rating) replaces the generic one
       - rm -f /app/share/metainfo/veyamux.metainfo.xml

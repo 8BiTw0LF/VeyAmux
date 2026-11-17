@@ -171,6 +171,44 @@ Forskelle fra originalen (billedet er det samme):
   så hver simuleret linje tager gennemsnittet af de kilderækker, den dækker (op til 8), i stedet for at plukke én.
 - **Maske:** kun maske 1 er med.
 
+## Demo-scene (Abyssal Garden)
+Kilden `demo:30` / `demo:60` er **Abyssal Garden** (https://github.com/Noniv/abyssal-garden, MIT, © 2026 Maksymilian
+Dendura, commit `a596354`), oversat fra JavaScript/WebGPU til C++ i `src/abyssal/`.
+
+**Shaders og grafik**
+- WGSL-shaderne bruges uændret. `tools/abyssal/extract.mjs` skriver dem ud for det høje detaljeniveau, så de ligger i
+  `src/abyssal/wgsl/`.
+- De køres gennem **wgpu-native** v29 (WebGPU på Vulkan, MIT/Apache-2.0, linket statisk). Den hentes af
+  `scripts/fetch-tools.sh`.
+
+**Verdensgeneratoren**
+- `world.js`, `math.js` og genereringsdelen af `main.js` er oversat sætning for sætning. JavaScripts regneregler er
+  bevaret: doubles, float-lagring, Math.round og den samme tilfældige talrække. Hvor JavaScript trækker flere
+  tilfældige tal i ét udtryk, trækkes de i samme rækkefølge.
+- Resultatet er **byte for byte identisk** med originalen: terræn, cirka 2 mio. blade, sten, svampe, koraller, fisk,
+  bobler, lysvolumen, kollisionsfelt og alle 26 meshes.
+  - Tjek: `ABYSSAL_DUMP=<mappe> veyamux-abyssal-test <ud>` skriver C++-udgaven.
+  - `node tools/abyssal/jsgen.mjs <abyssal-garden>/source/src <mappe> <js-mappe>` kører originalen på det samme
+    tæthedsgitter.
+  - Sammenlign de to mapper med `cmp`.
+
+**Billede og styring**
+- **Opløsning:** fast 1920×1080 (høj kvalitet: 4× MSAA, 4096-skyggekort, 34 lysstråle-trin). Dynamisk opløsning er
+  fjernet, så VeyAmux altid får samme størrelse.
+- **Billedet til VeyAmux:** det læses tilbage som RGBA og afleveres som et capture-billede (`DemoSource.cpp`), så hele
+  kæden virker.
+- **Billedhastighed:** 30 eller 60 fps, holdt af rendertråden.
+- **Verden bygges én gang** pr. kørsel i baggrunden, og der vises et ventebillede med fremskridt imens.
+- **Styring:** taster, træk med musen og controller samles i `demo::setKey` / `addLook` / `setPad`.
+  - Uden menu: venstre stik svømmer, højre stik kigger, triggere og skulderknapper giver ned/op, og venstre
+    stik-klik er hurtigere.
+  - Kun når menuen er lukket. Når den åbnes, nulstilles alt.
+
+**Lyd**
+- `audio.js`-grafen er bygget om til en lille synthesizer (`AbyssalAudio.cpp`). Den kører i capture-lydtråden som
+  kilden `@demo`, så lydmåler, optagelse og stream får den.
+- Konvolutions-efterklangen på 5 s er erstattet af en Freeverb-agtig efterklang med samme hendøen.
+
 ## Pixel-perfekt skalering
 Under Retro TV. To dele:
 - **Visning** (`VideoItem`): billedet forstørres med et helt tal `k = floor(min(vinduesbredde/b, vindueshøjde/h))` med

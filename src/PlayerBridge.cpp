@@ -1,5 +1,6 @@
 #include "PlayerBridge.h"
 #include "Sandbox.h"
+#include "DemoSource.h"
 #include "PulseDevices.h"
 #include <cstring>
 #include <QLocale>
@@ -121,6 +122,16 @@ PlayerBridge::PlayerBridge(const QString& shaderDir, QObject* parent)
         if (overlay_) updateOverlay();
         checkHighRate();
         updatePixelGrid();
+        if (demoActive_) {
+            const double p = veyamux::demo::progress();
+            if (p != demoProgress_) {
+                demoProgress_ = p;
+                emit demoChanged();
+                if (p >= 1) setStatus({});
+                else setStatus(L("Building the underwater world", "Bygger undervandsverdenen") + QStringLiteral("... %1 %").arg(int(p * 100)));
+            }
+            if (veyamux::demo::failed() && !veyamux::demo::stage().empty()) setStatus(translateMessage(QString::fromStdString(veyamux::demo::stage())));
+        }
         if (!engine_.isOpen()) return;
         emit positionChanged();
         if (engine_.playing() != lastPlaying_) { lastPlaying_ = engine_.playing(); emit playingChanged(); }
@@ -692,6 +703,7 @@ bool PlayerBridge::openUrl(const QUrl& url) { return openPath(url.isLocalFile() 
 
 bool PlayerBridge::openPath(const QString& path) {
     std::string err;
+    demoActive_ = false;
     if (liveVk_) liveVk_->setActive(false);
     { QMutexLocker l(&imgMutex_); image_ = QImage(); }
     if (!engine_.open(path.toStdString(), err)) {
@@ -1025,6 +1037,8 @@ void PlayerBridge::openScreenCast(const QString& audioSource, bool useLast) {
 
 bool PlayerBridge::startCapture(const QString& path, const veyamux::CaptureMode& mode, const QString& audioSource) {
     const bool screenCast = veyamux::CaptureSource::isScreenCast(path.toStdString());
+    demoActive_ = veyamux::CaptureSource::isDemo(path.toStdString());
+    veyamux::demo::releaseAll();
     if (!screenCast && portal_) portal_->closeSession();   // a capture card replaces the shared window
     std::string err;
     { QMutexLocker l(&imgMutex_); image_ = QImage(); }
@@ -1055,10 +1069,42 @@ bool PlayerBridge::startCapture(const QString& path, const veyamux::CaptureMode&
 
 bool PlayerBridge::openCaptureAuto(const QString& path) {
     if (path == "screencast") { openScreenCast(lastCaptureAudio(), true); return true; }
+    if (veyamux::CaptureSource::isDemo(path.toStdString())) { openDemo(path.mid(5).toInt()); return true; }
     QString card;
     for (const auto& d : veyamux::listCaptureDevices()) if (QString::fromStdString(d.path) == path) card = QString::fromStdString(d.name);
     captureModes(path);
     return openCapture(path, 0, guessAudioSource(card));
+}
+
+// ------------------------------------------------------------------ demo scene
+
+bool PlayerBridge::demoAvailable() const { return veyamux::demo::available(); }
+
+void PlayerBridge::openDemo(int fps) {
+    if (!veyamux::demo::available()) { setStatus(L("This build has no demo scene", "Denne udgave har ingen demo")); return; }
+    if (portal_) portal_->closeSession();
+    demoProgress_ = -1;   // the tick reports the first progress
+    startCapture(QStringLiteral("demo:%1").arg(fps == 30 ? 30 : 60), veyamux::CaptureMode{}, QStringLiteral("@demo"));
+}
+
+void PlayerBridge::demoKey(const QString& key, bool down) {
+    using K = veyamux::demo::Key;
+    static const QHash<QString, K> keys = {{"w", K::Forward}, {"s", K::Back}, {"a", K::Left}, {"d", K::Right}, {"e", K::Up}, {"q", K::Down}, {"shift", K::Fast}};
+    if (auto it = keys.find(key); it != keys.end()) veyamux::demo::setKey(*it, down);
+}
+
+void PlayerBridge::demoLook(double dx, double dy) { veyamux::demo::addLook(dx, dy); }
+
+void PlayerBridge::demoPose(int pose) {
+    demoPose_ = pose >= 0 ? pose % 6 : (demoPose_ + 1) % 6;
+    veyamux::demo::jumpTo(demoPose_);
+}
+
+void PlayerBridge::demoRelease() { veyamux::demo::releaseAll(); }
+
+void PlayerBridge::demoPad(double lx, double ly, double rx, double ry, double lt, double rt, bool fast) {
+    if (!demoActive()) return;
+    veyamux::demo::setPad(lx, ly, rx, ry, lt, rt, fast);
 }
 
 // ------------------------------------------------------------------ frame generation / Lossless Scaling
@@ -1219,6 +1265,9 @@ QString PlayerBridge::translateMessage(const QString& msg) const {
         "The screen share was not started",
         "PipeWire (libpipewire-0.3.so.0) was not found",
         "PipeWire: ",
+        "No Vulkan graphics card for the demo",
+        "The graphics card refused the demo's device",
+        "The demo's graphics device was lost",
     };
     for (const char* en : prefixes) {
         const QString e = QString::fromUtf8(en);
