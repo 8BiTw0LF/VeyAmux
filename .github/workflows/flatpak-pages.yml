@@ -1,0 +1,49 @@
+# Publishes the signed Flatpak repository (built by flatpak.yml for a release) on GitHub Pages:
+#   https://<owner>.github.io/<repo>/  (veyamux.flatpakrepo, veyamux.flatpakref, repo/)
+# Runs after each Flatpak build; only builds that made a "flatpak-site" artifact (releases, with the signing key set)
+# are published. Needs Settings -> Pages -> Source: GitHub Actions.
+name: Flatpak repository (Pages)
+
+on:
+  workflow_run:
+    workflows: [Flatpak]
+    types: [completed]
+
+permissions:
+  actions: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Fetch the repository from the Flatpak build
+        id: fetch
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: flatpak-site
+          path: site
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - uses: actions/configure-pages@v5
+        if: steps.fetch.outcome == 'success'
+
+      - uses: actions/upload-pages-artifact@v3
+        if: steps.fetch.outcome == 'success'
+        with:
+          path: site
+
+      - id: deploy
+        if: steps.fetch.outcome == 'success'
+        uses: actions/deploy-pages@v4
