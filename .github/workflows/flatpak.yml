@@ -1,12 +1,24 @@
-# Test build of the Flatpak (the same manifest that goes to Flathub, with the local source): every push to main and
-# by hand. The result, VeyAmux.flatpak, is kept as a workflow artifact (Actions tab) and installs with
-#   flatpak install --user VeyAmux.flatpak
+# Builds VeyAmux as a Flatpak.
+# - Every push to main / by hand: a test build, kept as a workflow artifact (Actions tab).
+# - Pushing a release tag (VeyAmux-V.x.y): the bundle is also attached to that GitHub release as
+#   VeyAmux-x86_64.flatpak, which installs with
+#     flatpak install --user VeyAmux-x86_64.flatpak
+#   (the KDE runtime it needs comes from Flathub automatically).
 name: Flatpak
 
 on:
   push:
     branches: [main]
+    tags: ['VeyAmux-V.*']
   workflow_dispatch:
+    inputs:
+      release:
+        description: 'Build this release tag and attach the Flatpak to its release (e.g. VeyAmux-V.1.0); empty: test build of main'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
 
 env:
   SRC: .          # folder with CMakeLists.txt / packaging (linux in the Veyra fork)
@@ -17,6 +29,8 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release || github.ref }}
 
       - name: Install flatpak-builder
         run: |
@@ -41,18 +55,23 @@ jobs:
           flatpak-builder --user --install-deps-from=flathub --force-clean --repo=repo-flatpak \
             build-flatpak packaging/flatpak/io.github._8BiTw0LF.VeyAmux.yml
           flatpak build-bundle --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo \
-            repo-flatpak VeyAmux.flatpak io.github._8BiTw0LF.VeyAmux
-
-      # Flathub's own checks (the same the Flathub bot runs on a submission); reported, not blocking
-      - name: Flathub lint
-        working-directory: ${{ env.SRC }}
-        continue-on-error: true
-        run: |
-          flatpak install --user -y --noninteractive flathub org.flatpak.Builder
-          echo "== manifest"; flatpak run --command=flatpak-builder-lint org.flatpak.Builder --exceptions manifest packaging/flatpak/io.github._8BiTw0LF.VeyAmux.yml || true
-          echo "== repo"; flatpak run --command=flatpak-builder-lint org.flatpak.Builder --exceptions repo repo-flatpak || true
+            repo-flatpak VeyAmux-x86_64.flatpak io.github._8BiTw0LF.VeyAmux
 
       - uses: actions/upload-artifact@v4
         with:
-          name: VeyAmux.flatpak
-          path: ${{ env.SRC }}/VeyAmux.flatpak
+          name: VeyAmux-x86_64.flatpak
+          path: ${{ env.SRC }}/VeyAmux-x86_64.flatpak
+
+      # the AppImage workflow creates the release; wait for it, then add the Flatpak to it
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/') || inputs.release != ''
+        working-directory: ${{ env.SRC }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.release || github.ref_name }}
+        run: |
+          for i in $(seq 1 60); do
+            gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 && break
+            echo "waiting for the release $TAG ..."; sleep 30
+          done
+          gh release upload "$TAG" VeyAmux-x86_64.flatpak --clobber -R "$GITHUB_REPOSITORY"

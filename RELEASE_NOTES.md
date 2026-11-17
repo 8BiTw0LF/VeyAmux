@@ -12,7 +12,6 @@ step: 1.1, 1.2 and so on up to 1.9, then 2.0. This release is 2.1.5-linux21 plus
 ### Flatpak
 - The Flatpak version now builds and runs. In it, Lossless Scaling frame generation works through the Flathub
   extension `org.freedesktop.Platform.VulkanLayer.lsfgvk`.
-- The Flathub release is on its way.
 
 ### Everything from 2.1.5-linux21
 - **Built-in demo scene** (Abyssal Garden): a live 3D underwater world in 1080p at 30 or 60 fps. You can try every
@@ -22,8 +21,10 @@ step: 1.1, 1.2 and so on up to 1.9, then 2.0. This release is 2.1.5-linux21 plus
 - **Four themes** and **eight languages**.
 
 ### Download
-Download `VeyAmux-x86_64.AppImage` below, make it executable (`chmod +x`) and run it. Once installed, it can update
-itself through the `.zsync` file (for example with Gear Lever).
+- **AppImage:** download `VeyAmux-x86_64.AppImage` below, make it executable (`chmod +x`) and run it. It can update
+  itself through the `.zsync` file (for example with Gear Lever).
+- **Flatpak:** download `VeyAmux-x86_64.flatpak` below and install it with
+  `flatpak install --user VeyAmux-x86_64.flatpak`. The Flatpak is added a few minutes after the AppImage.
 
 Lossless Scaling frame generation still needs your own copy of Lossless Scaling (Steam) and lsfg-vk. VeyAmux does not
 include either of them.
