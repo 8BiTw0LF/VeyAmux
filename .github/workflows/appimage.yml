@@ -1,12 +1,12 @@
 # Builds VeyAmux-x86_64.AppImage (+ .zsync for automatic updates) on GitHub.
 # - Every push to main / pull request: build and keep the AppImage as a workflow artifact (Actions tab).
-# - Pushing a tag such as v2.1.5-linux16: build and publish a GitHub release with both files attached.
+# - Pushing a tag such as VeyAmux-V.1.0: build and publish a GitHub release with both files attached.
 name: AppImage
 
 on:
   push:
     branches: [main]
-    tags: ['v*']
+    tags: ['VeyAmux-V.*', 'v*']
   pull_request:
   workflow_dispatch:
 
@@ -52,7 +52,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          name: VeyAmux ${{ github.ref_name }}
+          name: ${{ startsWith(github.ref_name, 'VeyAmux-') && github.ref_name || format('VeyAmux {0}', github.ref_name) }}
           make_latest: true
           # the description: RELEASE_NOTES.md (what is new), then GitHub's generated changelog link
           body_path: ${{ env.SRC }}/RELEASE_NOTES.md
