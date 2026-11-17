@@ -11,14 +11,15 @@
 
 <p align="center">
   Upscaling (FSR&nbsp;1 · NIS · FSR&nbsp;3.1) · noise reduction · frame generation (Lossless Scaling or free FSR&nbsp;3.1) ·
-  HDR · Retro TV (CRT) · replay, recording and live streaming · window or screen as a source
+  HDR · Retro TV (CRT) and pixel-perfect scaling · replay, recording and live streaming · window or screen as a source ·
+  built-in 3D demo · controller support · 8 languages
   <br>
   <a href="https://github.com/8BiTw0LF/VeyAmux/releases/latest"><b>Download the latest release</b></a> ·
   GPL-3.0 · Linux port of <a href="https://github.com/Likely7/Veyra-NRVideo">Veyra-NRVideo 2.1.5</a>
 </p>
 
 <p align="center">
-  <img src="docs/images/start.png" width="560" alt="VeyAmux start screen with the Open file and Capture buttons">
+  <img src="docs/images/start.png" width="560" alt="VeyAmux start screen with the Open file and Capture buttons, the demo buttons (30 and 60 fps), the four themes and the language choice">
 </p>
 
 ---
@@ -32,13 +33,22 @@ whole screen** on your desktop, or from a **video file**, and makes it look bett
 - **remove noise**, grain and compression blocks;
 - **double or triple the frame rate** with Lossless Scaling, or double it for free with AMD FSR 3.1 frame generation;
 - **handle HDR**: tone-map HDR games for an SDR screen, or send real HDR to an HDR screen;
-- **look like an old TV** with *Retro TV* (curved CRT glass, scanlines and phosphor stripes);
+- **look like an old TV** with *Retro TV* (curved CRT glass, scanlines and phosphor stripes), or show retro games with
+  **pixel-perfect** sharp, square pixels;
 - **record, keep an instant replay and stream** to Twitch or YouTube, all encoded on the graphics card.
+
+No capture card yet? The **built-in demo** renders a live 3D underwater world, so you can try all of it right away. The
+menu can also be steered with a **game controller**.
 
 It runs on most distributions without installing anything, and it is built for **low latency**. A captured frame is
 uploaded to the GPU once, and everything else happens there. VeyAmux needs well under 1 ms of CPU time per 4K frame.
 
 Developed and tested on **Bazzite** (KDE Plasma) with an **AMD RX 9070 XT** and an **AVerMedia Live Gamer Ultra 2.1**.
+
+<p align="center">
+  <img src="docs/images/demo-menu.jpg" width="800" alt="The built-in demo, Abyssal Garden, with VeyAmux's menu open beside it">
+  <br><sub>The built-in demo with the menu (P) open beside it.</sub>
+</p>
 
 <p align="center">
   <img src="docs/images/menu.png" width="628" alt="Part of VeyAmux's menu: upscaling with NIS, noise reduction, HDR, anti-aliasing, sound output with a live spectrum, Retro TV, Steam, OBS, instant replay and live streaming">
@@ -56,7 +66,8 @@ needed for its own frame generation**, and everything else works without it:
 | Upscaling: FSR 1, NIS, FSR 3.1, Lanczos | ✅ | ✅ |
 | Noise reduction, sharpness, anti-aliasing (FXAA), colour | ✅ | ✅ |
 | HDR capture, HDR video files, HDR output, VRR mode | ✅ | ✅ |
-| Retro TV (CRT-Geom) | ✅ | ✅ |
+| Retro TV (CRT-Geom), pixel-perfect scaling | ✅ | ✅ |
+| Built-in demo scene, controller in the menu | ✅ | ✅ |
 | Instant replay, recording, screenshots, live streaming, OBS | ✅ | ✅ |
 | Sound output choice, sound meter, audio delay, profiles | ✅ | ✅ |
 | **Frame generation 2×**: AMD FSR 3.1 (free, inside VeyAmux) | ✅ | ✅ |
@@ -79,6 +90,10 @@ needed for its own frame generation**, and everything else works without it:
   - **Menu:** **P** or **Select + Start** opens it, and the game stops while it is open.
 
   The first start builds the world, which takes a few seconds.
+
+  <p align="center">
+    <img src="docs/images/demo.jpg" width="720" alt="Abyssal Garden in VeyAmux: a stone whale fluke between kelp, with the swimming controls shown at the bottom">
+  </p>
 - **Capture cards** (V4L2 / UVC): every mode the card offers (NV12, YUYV, UYVY, P010 HDR, I420, RGB, MJPEG), the best
   one marked with ★. If the card drops out, or stalls when the console changes resolution, refresh rate or HDR,
   VeyAmux reconnects by itself.
@@ -263,6 +278,9 @@ display. Turn VRR / adaptive sync off for VeyAmux.
 **Controller:** **Select + Start** (or hold **Guide**) menu · **D-pad / stick** move · **A** choose · **B** close ·
 **LB / RB** columns
 
+**Demo:** **W A S D** swim · **Q / E** down / up · **Shift** faster · drag with the mouse to look · **1–6** viewpoints ·
+controller sticks, triggers and **Y**
+
 ## Command line
 
 | Option | What it does |
@@ -270,6 +288,7 @@ display. Turn VRR / adaptive sync off for VeyAmux.
 | `--capture /dev/video0` | Start on that capture card. |
 | `--capture last` | Start on the last source (the card, even under a new `/dev/videoN`, or the last shared window). |
 | `--capture screencast` | Open the desktop's share dialog for a window or screen. |
+| `--capture demo:60` | Start the built-in demo (`demo:30` for 30 fps). |
 | `--fullscreen` | Start fullscreen. |
 | `--panel` / `--dialog` | Start with the menu or the Capture dialog open. |
 | `--reset-ui` | Test the graphics path again (after a driver or desktop change). |
@@ -300,7 +319,8 @@ sudo apt install cmake ninja-build g++ pkg-config patchelf file python3 glslang-
 ./scripts/build-appimage.sh          # -> dist/VeyAmux-x86_64.AppImage
 ```
 
-`scripts/fetch-tools.sh` downloads DXC (HLSL → SPIR-V), linuxdeploy and appimagetool (Ubuntu 24.04 package names above).
+`scripts/fetch-tools.sh` downloads DXC (HLSL → SPIR-V), wgpu-native (for the demo), linuxdeploy and appimagetool
+(Ubuntu 24.04 package names above).
 
 ## License and credits
 
@@ -314,6 +334,9 @@ sudo apt install cmake ninja-build g++ pkg-config patchelf file python3 glslang-
   - PipeWire headers (MIT)
   - Press Start 2P and Cinzel fonts (SIL OFL 1.1)
   - SPIRV-Reflect (Apache-2.0)
+  - [Abyssal Garden](https://github.com/Noniv/abyssal-garden) by Maksymilian Dendura (MIT): the demo scene, ported from
+    JavaScript to C++
+  - [wgpu-native](https://github.com/gfx-rs/wgpu-native) (MIT / Apache-2.0)
 
   See [THIRD_PARTY_NOTICES_LINUX.md](THIRD_PARTY_NOTICES_LINUX.md).
 - [lsfg-vk](https://lsfg-vk.dev) and [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) are
