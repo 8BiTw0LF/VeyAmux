@@ -43,6 +43,15 @@ jobs:
           flatpak build-bundle --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo \
             repo-flatpak VeyAmux.flatpak io.github._8BiTw0LF.VeyAmux
 
+      # Flathub's own checks (the same the Flathub bot runs on a submission); reported, not blocking
+      - name: Flathub lint
+        working-directory: ${{ env.SRC }}
+        continue-on-error: true
+        run: |
+          flatpak install --user -y --noninteractive flathub org.flatpak.Builder
+          echo "== manifest"; flatpak run --command=flatpak-builder-lint org.flatpak.Builder --exceptions manifest packaging/flatpak/io.github._8BiTw0LF.VeyAmux.yml || true
+          echo "== repo"; flatpak run --command=flatpak-builder-lint org.flatpak.Builder --exceptions repo repo-flatpak || true
+
       - uses: actions/upload-artifact@v4
         with:
           name: VeyAmux.flatpak
