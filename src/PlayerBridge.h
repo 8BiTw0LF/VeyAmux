@@ -411,7 +411,7 @@ public slots:
     void chooseLsfgFolder();
     void installLsfg();   // downloads lsfg-vk 2 from builds.lsfg-vk.dev into ~/.local (LsfgInstall.h)
     // demo scene: start it at 30 or 60 fps; keyboard / mouse / controller input while the menu is closed
-    void openDemo(int fps);
+    void openDemo(int fps, int height = 1080);   // height 720 or 1080
     void demoKey(const QString& key, bool down);   // "w" "a" "s" "d" "q" "e" "shift"
     void demoLook(double dx, double dy);
     void demoPose(int pose);                       // -1: the next viewpoint

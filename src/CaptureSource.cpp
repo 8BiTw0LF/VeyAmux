@@ -295,9 +295,11 @@ bool CaptureSource::open(const std::string& path, const CaptureMode& mode, std::
     }
     if (isDemo(path)) {
         auto d = std::make_unique<demo::Stream>();
-        if (!d->open(std::atoi(path.c_str() + 5), error)) return false;
+        // "demo:<fps>[:<height>]"
+        const char* colon = std::strchr(path.c_str() + 5, ':');
+        if (!d->open(std::atoi(path.c_str() + 5), colon ? std::atoi(colon + 1) : 1080, error)) return false;
         demo_ = std::move(d);
-        w_ = demo::kWidth; h_ = demo::kHeight; fps_ = demo_->fps();
+        w_ = demo_->width(); h_ = demo_->height(); fps_ = demo_->fps();
         card_ = "Abyssal Garden (demo)";
         fourcc_ = 0;
         return true;

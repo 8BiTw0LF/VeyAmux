@@ -1136,7 +1136,11 @@ bool PlayerBridge::startCapture(const QString& path, const veyamux::CaptureMode&
 
 bool PlayerBridge::openCaptureAuto(const QString& path) {
     if (path == "screencast") { openScreenCast(lastCaptureAudio(), true); return true; }
-    if (veyamux::CaptureSource::isDemo(path.toStdString())) { openDemo(path.mid(5).toInt()); return true; }
+    if (veyamux::CaptureSource::isDemo(path.toStdString())) {
+        const QStringList p = path.mid(5).split(':');   // "demo:<fps>[:<height>]"
+        openDemo(p.value(0).toInt(), p.size() > 1 ? p.at(1).toInt() : 1080);
+        return true;
+    }
     if (veyamux::CaptureSource::isRemotePlay(path.toStdString())) { psConnect(path.mid(3)); return true; }
     QString card;
     for (const auto& d : veyamux::listCaptureDevices()) if (QString::fromStdString(d.path) == path) card = QString::fromStdString(d.name);
@@ -1148,11 +1152,13 @@ bool PlayerBridge::openCaptureAuto(const QString& path) {
 
 bool PlayerBridge::demoAvailable() const { return veyamux::demo::available(); }
 
-void PlayerBridge::openDemo(int fps) {
+void PlayerBridge::openDemo(int fps, int height) {
     if (!veyamux::demo::available()) { setStatus(L("This build has no demo scene", "Denne udgave har ingen demo")); return; }
     if (portal_) portal_->closeSession();
     demoProgress_ = -1;   // the tick reports the first progress
-    startCapture(QStringLiteral("demo:%1").arg(fps == 30 ? 30 : 60), veyamux::CaptureMode{}, QStringLiteral("@demo"));
+    const QString path = height == 720 ? QStringLiteral("demo:%1:720").arg(fps == 30 ? 30 : 60)
+                                       : QStringLiteral("demo:%1").arg(fps == 30 ? 30 : 60);
+    startCapture(path, veyamux::CaptureMode{}, QStringLiteral("@demo"));
 }
 
 void PlayerBridge::demoKey(const QString& key, bool down) {
