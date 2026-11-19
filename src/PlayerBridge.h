@@ -51,6 +51,8 @@ class PlayerBridge : public QObject {
     // spectrum of the source's sound (before volume and mute): 24 bands 0..1, ~30 updates per second
     Q_PROPERTY(QVariantList audioBands READ audioBands NOTIFY audioMeterChanged)
     Q_PROPERTY(bool audioActive READ audioActive NOTIFY audioMeterChanged)
+    // the menu (with the spectrum) is open: only then is the meter sent to the UI, 30 times a second
+    Q_PROPERTY(bool meterWanted READ meterWanted WRITE setMeterWanted)
     Q_PROPERTY(QString gpuName READ gpuName NOTIFY statsChanged)
     Q_PROPERTY(QString status READ status NOTIFY statusChanged)
     Q_PROPERTY(QString perf READ perf NOTIFY statsChanged)
@@ -501,6 +503,9 @@ private:
     QVariantList bands_;
     bool audioActive_ = false;
     QVariantList audioBands() const { return bands_; }
+    bool meterWanted() const { return meterWanted_; }
+    void setMeterWanted(bool v) { meterWanted_ = v; }
+    bool meterWanted_ = true;
     bool audioActive() const { return audioActive_; }
     veyamux::ScreenCastPortal* portal_ = nullptr;
     QString scAudio_;

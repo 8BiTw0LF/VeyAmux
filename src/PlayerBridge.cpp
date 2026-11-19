@@ -86,7 +86,7 @@ PlayerBridge::PlayerBridge(const QString& shaderDir, QObject* parent)
             emit statsChanged();
         }, Qt::QueuedConnection);
     };
-    cb.onLiveFrame = [this](veyamux::RawFrame&& f) { if (liveVk_) liveVk_->submit(std::move(f)); };
+    cb.onLiveFrame = [this](veyamux::RawFrame& f) { if (liveVk_) liveVk_->submit(f); };
     cb.onAudio = [this](const int16_t* pcm, int frames, std::chrono::steady_clock::time_point t) {
         meter_.push(pcm, frames);   // the source's sound, before volume and mute (also what recordings/streams get)
         rec_->pushAudio(pcm, frames, t);
@@ -94,6 +94,7 @@ PlayerBridge::PlayerBridge(const QString& shaderDir, QObject* parent)
     {   // spectrum meter for the menu, ~30 updates per second while something moves
         auto* mt = new QTimer(this);
         connect(mt, &QTimer::timeout, this, [this] {
+            if (!meterWanted_) return;   // menu closed: the spectrum is not on screen
             const auto b = meter_.bands();
             const bool act = meter_.active();
             bool any = false;

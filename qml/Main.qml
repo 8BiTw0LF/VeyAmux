@@ -22,6 +22,7 @@ Window {
     readonly property bool compactMenu: handheld || Qt.application.arguments.indexOf("--compact-menu") >= 0 || screenMm < 260 || width < 1000
     property bool panelOpen: startPanel
     onPanelOpenChanged: if (panelOpen) player.demoRelease()   // the demo stops swimming while the menu is open
+    Binding { target: player; property: "meterWanted"; value: win.panelOpen }   // the spectrum is only updated while it shows
     property bool controlsShown: true
     property bool scrubbing: false
     property real scrubValue: 0

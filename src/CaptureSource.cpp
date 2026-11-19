@@ -491,6 +491,7 @@ CaptureSource::Result CaptureSource::read(std::vector<uint8_t>& rgba, int timeou
 
 CaptureSource::Result CaptureSource::readLatest(RawFrame& out, int timeoutMs, std::string& error) {
     if (ps_) {
+        out.repeat = false;
         const auto r = ps_->readLatest(out, timeoutMs, error);
         if (r == remoteplay::Stream::Result::Frame) {
             w_ = out.w; h_ = out.h;
