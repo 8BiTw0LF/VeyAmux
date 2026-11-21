@@ -32,7 +32,7 @@ Rectangle {
     readonly property var scales: [1.0, 1.5, 2.0, 3.0]
 
     readonly property real designW: 600
-    readonly property real contentScale: compact ? Math.max(0.9, (width - 40) / designW)
+    readonly property real contentScale: compact ? Math.max(0.9, Math.min(1.35, (width - 40) / designW))
                                                  : Math.max(1.0, Math.min(1.8, (parent ? parent.height : 1080) / 1000))
     width: compact ? (parent ? parent.width : 800) : Math.min((parent ? parent.width : 1200) - 24, designW * contentScale + 48)
     height: compact ? (parent ? parent.height : 600) : (parent ? parent.height - 24 : 600)
