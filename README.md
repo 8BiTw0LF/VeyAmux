@@ -25,6 +25,12 @@
 
 ---
 
+## New in 1.7
+
+- **PlayStation Remote Play by IP address:** if the console is not found, type its IP address. VeyAmux asks it
+  directly, which also works across subnets, VPNs and firewalls (such as Bazzite's) that drop the answer to the
+  network-wide search, and the console can be registered even if it never answers the search.
+
 ## New in 1.6
 
 - **A new start screen and menu:** the sources as three large cards, and a menu with six tabs (Picture, Frame
