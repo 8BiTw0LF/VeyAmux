@@ -131,6 +131,10 @@ needed for its own frame generation**, and everything else works without it:
     address the browser ends on, and VeyAmux reads your account ID from it.
   - **Once per console:** on the console open *Settings → System → Remote Play → Link Device* (PS5) or *Settings →
     Remote Play Connection Settings → Add Device* (PS4), and type the 8-digit number into VeyAmux.
+  - **Console not found?** Type its IP address under *Add a console by IP address* (shown on the console under
+    *Settings → Network → Connection Status*). VeyAmux then asks it directly, which also works across subnets, VPNs and
+    firewalls that drop the answer to the network-wide search, and it can be registered even if it never answers the
+    search.
   - **Then:** press **Play**. A console in rest mode is woken up. The picture (720p or 1080p, 30 or 60 fps, HDR on the
     PS5) and the sound come straight into VeyAmux, with all its processing.
   - **Controller:** your controller plays the game while the menu is closed (any controller; a DualSense or DualShock 4
