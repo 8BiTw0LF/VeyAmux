@@ -330,7 +330,7 @@ int main(int argc, char** argv) {
         win->setGraphicsDevice(QQuickGraphicsDevice::fromDeviceObjects(vkCtx->physical(), vkCtx->device(), int(vkCtx->queueFamily()), 0));
         live = std::make_unique<LiveVulkan>(win, vkCtx.get(), findShaderDir());
         std::string err;
-        if (live->init(err)) player.setLiveVulkan(live.get());
+        if (live->init(err)) { player.setLiveVulkan(live.get()); player.setGpuDevice(QString::fromStdString(vkCtx->deviceName())); }
         else { qWarning("Zero-copy live path disabled: %s", err.c_str()); live.reset(); }
     }
     player.setWindow(win);

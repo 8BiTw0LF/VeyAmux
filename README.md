@@ -147,7 +147,7 @@ needed for its own frame generation**, and everything else works without it:
   - Built on the protocol library of [chiaki-ng](https://github.com/streetpea/chiaki-ng). Only on the local network for
     now (not over the internet).
 - **Capture cards** (V4L2 / UVC): every mode the card offers (NV12, YUYV, UYVY, P010 HDR, I420, RGB, MJPEG), the best
-  one marked with ★. If the card drops out, or stalls when the console changes resolution, refresh rate or HDR,
+  one marked with ★. If you pick a compressed MJPEG mode where the card also has an uncompressed one, VeyAmux says so. If the card drops out, or stalls when the console changes resolution, refresh rate or HDR,
   VeyAmux reconnects by itself.
 - **A window or a whole screen** (Wayland: KDE Plasma, GNOME, …): choose *Window or screen …* under **Capture**, and your
   desktop asks what to share, the same way OBS and Discord do. The picture gets all of VeyAmux's processing.
@@ -168,7 +168,9 @@ needed for its own frame generation**, and everything else works without it:
   dithering and compression noise, so *Sharpness* can be raised without sharpening the noise.
 - **Anti-flicker**: calms only the pixels that flicker between frames (thin lines, fences, foliage, distant detail) by
   averaging them with the two previous frames along the motion. Everything else is left alone, and it adds no delay.
-- **Sharpness**, **anti-aliasing** (FXAA from Veyra), **exposure**, **contrast** and **saturation**.
+- **Sharpness**, **anti-aliasing** (FXAA or SMAA), **exposure**, **contrast** and **saturation**.
+- **Texture, clarity and dehaze** (from Veyra): texture brings out fine detail, clarity the contrast of mid-sized
+  shapes, and dehaze takes away a grey veil. The colours stay as they are.
 - **Retro TV**: turns the picture into an old CRT television, with a slightly curved glass screen, rounded corners,
   visible scanlines and red-green-blue phosphor stripes. This is CRT-Geom with the same settings as ShaderGlass'
   `crt-geom` preset. Choose 240 lines (old consoles), 480 lines (PS2 / GameCube era) or the source's own lines.
@@ -191,7 +193,10 @@ needed for its own frame generation**, and everything else works without it:
   frame is shown half a frame later. *Lock the HUD* keeps still text, maps and gauges from warping in the generated
   frames.
 - **Smarter input**: a 30 fps game in a 60 Hz signal repeats every picture. VeyAmux drops the repeats, so frame
-  generation turns 30 distinct frames into smooth 60.
+  generation turns 30 distinct frames into smooth 60. Every pixel of the picture is compared, so even a small movement
+  seen from a still camera counts as a new frame and is not thrown away.
+- **Screen check**: if frame generation asks for more frames than the screen shows (30 fps × 3 on a 60 Hz screen),
+  VeyAmux says so and what to change.
 - **Even out frame pacing** (optional): many games locked to 30 fps show their pictures 17/50 ms apart instead of 33/33,
   and frame generation keeps that judder. VeyAmux moves each picture to an even rhythm first (costs one refresh of delay,
   about 17 ms at 60 Hz).
@@ -240,7 +245,7 @@ it is drawn 1:1 instead of being stretched bilinearly: sharper when enlarged, no
   appears.
 - **Game controller in the menu**: hold **Select + Start** (or the **Guide / PS** button for half a second) to open and
   close the menu. While it is open, the controller only steers the menu (the game gets nothing): the D-pad or left
-  stick moves, **A** chooses, left/right change a slider, **LB / RB** jump between the columns and **B** closes. Xbox,
+  stick moves, **A** chooses, left/right change a slider, **LB / RB** switch between the tabs and **B** closes. Xbox,
   PlayStation, Switch and most other controllers work.
 - **Steam Deck and touchscreens**: on the Deck, Select + Start are the **View (⧉)** and **Menu (☰)** buttons. The menu
   can also be opened without them: a tap on the touchscreen shows the controls with the menu button (a tap does not
@@ -252,14 +257,19 @@ it is drawn 1:1 instead of being stretched bilinearly: sharper when enlarged, no
     <img src="docs/images/handheld-menu.jpg" width="640" alt="VeyAmux's menu on a 1280×800 handheld screen: it fills the screen in two columns with large text and a close button in the corner">
     <br><sub>The menu on a 1280×800 handheld screen (Steam Deck size).</sub>
   </p>
-- **Updates through Gear Lever / AppImageUpdate** (only the changed parts are downloaded).
+- **Updates from inside the app**: VeyAmux looks for a new version on GitHub (at most twice a day, or when you ask).
+  One click downloads it, checks it against the release's checksum and puts it in place of the AppImage; it starts at
+  the next restart. Gear Lever and AppImageUpdate still work too.
+- **Check my setup** (System tab): looks at what is running and says what costs sharpness, smoothness or sound, each
+  with one button that fixes it. A **performance report** can be copied for bug reports.
 - **Four themes**, chosen on the start screen, and the logo changes with them:
   - **Vice**: violet with a pink-to-orange sunset gradient.
   - **Code**: black with terminal green and monospace text.
   - **Inferno**: near-black with blood red, ember orange and classical capitals.
   - **Retro**: 8-bit console greys and red, square buttons with a hard edge, and a pixel font.
 - **Eight languages**: English, Danish, German, Spanish, French, Swedish, Norwegian (Bokmål) and Russian, chosen from
-  the system or on the start screen. The whole menu is visible at once, with no scrolling.
+  the system or on the start screen.
+- **The menu** has six tabs: Picture, Frame generation, Display, Sound, Record and System.
 
 ## Latency
 
