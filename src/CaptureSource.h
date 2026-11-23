@@ -76,6 +76,8 @@ struct RawFrame {
     const uint8_t* bytes() const { return ext ? ext : data.data(); }
     size_t size() const { return ext ? extSize : data.size(); }
     std::chrono::steady_clock::time_point captured{};   // when the driver finished receiving it (V4L2 timestamp)
+    std::chrono::steady_clock::time_point due{};        // paced frames: when the pacer meant to hand it on (timing log)
+    std::chrono::steady_clock::time_point arrived{};    // when it reached the renderer (timing log)
 };
 
 class CaptureSource {

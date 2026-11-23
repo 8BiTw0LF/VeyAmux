@@ -390,6 +390,7 @@ void MediaEngine::captureLoop() {
                 const auto due = grid + std::chrono::microseconds(int64_t(holdMs * 1000.0));
                 std::lock_guard l(pace_m_);
                 while (paced_.size() >= 2) paced_.pop_front();   // never pile up: latency first
+                raw.due = due;
                 paced_.push_back({due, std::move(raw)});
                 raw = RawFrame{};
                 if (!paceSpare_.empty()) { raw = std::move(paceSpare_.back()); paceSpare_.pop_back(); }
@@ -397,6 +398,7 @@ void MediaEngine::captureLoop() {
                 continue;
             }
             pacingReset_ = true;
+            raw.due = {};
             if (cb_.onLiveFrame) cb_.onLiveFrame(raw);   // raw now holds a used buffer to fill next time
             else raw = RawFrame{};
             continue;
