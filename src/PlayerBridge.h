@@ -499,6 +499,9 @@ public slots:
     void demoPose(int pose);                       // -1: the next viewpoint
     void demoRelease();
     void demoPad(double lx, double ly, double rx, double ry, double lt, double rt, bool fast);
+    // gamescope: the pointer moved by VeyAmux itself (ignored by the window), and hiding it all but invisibly
+    bool syntheticMove() const;
+    void setPointerHidden(bool hidden);
 
     // ---- PlayStation Remote Play
     QVariantList psConsoles() const;
@@ -612,6 +615,8 @@ private:
             if (!closing) QMetaObject::invokeMethod(to, std::forward<F>(f), Qt::QueuedConnection);
         }
     };
+    bool gamescope_ = false, pointerHidden_ = false;
+    QElapsedTimer nudgeUntil_;
     std::shared_ptr<UiGate> psQuit_ = std::make_shared<UiGate>();   // VeyAmux is closing
     QTimer* psTimer_ = nullptr;     // refreshes the console list while searching
     QVariantList psSeen_;           // last discovery result

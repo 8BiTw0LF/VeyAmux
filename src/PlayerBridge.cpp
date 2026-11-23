@@ -1,4 +1,6 @@
 #include "PlayerBridge.h"
+#include <QPixmap>
+#include <QCursor>
 #include "Sandbox.h"
 #include "DemoSource.h"
 #include "RemotePlay.h"
@@ -181,6 +183,39 @@ PlayerBridge::PlayerBridge(const QString& shaderDir, QObject* parent)
     // updates: asked by itself a few seconds after the start (not while the first picture is being set up)
     if (autoUpdateCheck() && qEnvironmentVariable("VEYAMUX_NO_UPDATE_CHECK") != "1")
         QTimer::singleShot(8000, this, [this] { checkForUpdate(false); });
+    // Steam's gamescope session (SteamOS, Big Picture as a session): frame generation was reported to stop a few
+    // seconds after the mouse stops, and to come back when it moves. When the pointer is hidden and still, gamescope
+    // changes how it puts the window on screen. So while frame generation runs there, the pointer is never fully
+    // hidden (an all-but-transparent one, see setPointerHidden) and it is moved one pixel and back every two seconds,
+    // which VeyAmux itself ignores (syntheticMove). VEYAMUX_GAMESCOPE_KEEPALIVE=0 turns it off.
+    gamescope_ = inGamescope() || qEnvironmentVariable("XDG_CURRENT_DESKTOP").contains("gamescope", Qt::CaseInsensitive);
+    if (gamescope_ && qEnvironmentVariable("VEYAMUX_GAMESCOPE_KEEPALIVE") != "0") {
+        auto* keep = new QTimer(this);
+        connect(keep, &QTimer::timeout, this, [this] {
+            if (s_.frameGen == veyamux::FrameGenMode::Off || !hasMedia()) return;
+            const QPoint p = QCursor::pos();
+            nudgeUntil_.start();
+            QCursor::setPos(p + QPoint(p.x() > 0 ? -1 : 1, 0));
+            QCursor::setPos(p);
+        });
+        keep->start(2000);
+    }
+}
+
+bool PlayerBridge::syntheticMove() const { return nudgeUntil_.isValid() && nudgeUntil_.elapsed() < 250; }
+
+void PlayerBridge::setPointerHidden(bool hidden) {
+    if (!gamescope_ || qEnvironmentVariable("VEYAMUX_GAMESCOPE_KEEPALIVE") == "0") return;   // QML hides it itself
+    if (hidden == pointerHidden_) return;
+    pointerHidden_ = hidden;
+    if (hidden) {
+        // one pixel at the lowest alpha: nothing to see, but gamescope still has a pointer to draw
+        QImage img(1, 1, QImage::Format_ARGB32);
+        img.fill(qRgba(0, 0, 0, 1));
+        QGuiApplication::setOverrideCursor(QCursor(QPixmap::fromImage(img), 0, 0));
+    } else {
+        QGuiApplication::restoreOverrideCursor();
+    }
 }
 
 PlayerBridge::~PlayerBridge() {
