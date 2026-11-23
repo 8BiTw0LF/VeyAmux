@@ -36,6 +36,8 @@ struct CaptureMode {
 std::vector<CaptureDevice> listCaptureDevices();
 // Sorted best-first: >=50 fps first, then resolution, then fps, uncompressed before MJPEG.
 std::vector<CaptureMode> listCaptureModes(const std::string& path);
+// the order the list shows (the first is the default): see CaptureSource.cpp
+void orderCaptureModes(std::vector<CaptureMode>& modes);
 std::string fourccName(uint32_t fourcc);
 
 // Converts one captured buffer to RGBA8 (tightly packed).

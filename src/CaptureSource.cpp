@@ -189,6 +189,11 @@ std::vector<CaptureMode> listCaptureModes(const std::string& path) {
         }
     }
     ::close(fd);
+    orderCaptureModes(modes);
+    return modes;
+}
+
+void orderCaptureModes(std::vector<CaptureMode>& modes) {
     std::stable_sort(modes.begin(), modes.end(), [](const CaptureMode& a, const CaptureMode& b) {
         const bool ah = a.fps >= 50, bh = b.fps >= 50;
         if (ah != bh) return ah;
@@ -200,7 +205,37 @@ std::vector<CaptureMode> listCaptureModes(const std::string& path) {
         if (ap != bp) return bp;
         return !compressed(a.fourcc) && compressed(b.fourcc);
     });
-    return modes;
+    // First (the default, marked ★): the largest picture the card sends uncompressed, at its highest rate (on a
+    // 4K card typically 4K NV12 at 30 fps: sharpest, no decoding, least delay). Right below it: the same size at a
+    // higher rate, compressed if need be (4K MJPEG at 60 fps), for 60 fps games.
+    auto pixels = [](const CaptureMode& m) { return long(m.w) * m.h; };
+    auto raw = [](const CaptureMode& m) { return !compressed(m.fourcc) && m.fourcc != V4L2_PIX_FMT_P010; };
+    int first = -1;
+    for (int i = 0; i < int(modes.size()); ++i) {
+        if (!raw(modes[size_t(i)])) continue;
+        const auto& m = modes[size_t(i)];
+        if (first < 0 || pixels(m) > pixels(modes[size_t(first)]) ||
+            (pixels(m) == pixels(modes[size_t(first)]) && m.fps > modes[size_t(first)].fps + 0.5) ||
+            // same size and rate: NV12 (12 bits a pixel) before YUYV/UYVY (16): less USB and less to upload
+            (pixels(m) == pixels(modes[size_t(first)]) && std::abs(m.fps - modes[size_t(first)].fps) <= 0.5 &&
+             m.fourcc == V4L2_PIX_FMT_NV12 && modes[size_t(first)].fourcc != V4L2_PIX_FMT_NV12)) first = i;
+    }
+    if (first >= 0) {
+        const CaptureMode top = modes[size_t(first)];
+        modes.erase(modes.begin() + first);
+        int second = -1;
+        for (int i = 0; i < int(modes.size()); ++i) {
+            const auto& m = modes[size_t(i)];
+            if (m.w != top.w || m.h != top.h || m.fps <= top.fps + 0.5 || m.fourcc == V4L2_PIX_FMT_P010) continue;
+            if (second < 0 || m.fps > modes[size_t(second)].fps + 0.5) second = i;   // the sort put the best format first
+        }
+        if (second >= 0) {
+            const CaptureMode next = modes[size_t(second)];
+            modes.erase(modes.begin() + second);
+            modes.insert(modes.begin(), next);
+        }
+        modes.insert(modes.begin(), top);
+    }
 }
 
 // ------------------------------------------------------------------ FrameConverter
