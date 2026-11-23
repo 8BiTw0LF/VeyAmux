@@ -156,10 +156,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ./scripts/fetch-tools.sh
-          cmake -G Ninja -S . -B build-asan -DCMAKE_BUILD_TYPE=RelWithDebInfo -DVEYAMUX_DXC_ROOT=.tools/dxc \
-            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined" \
-            -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
-            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+          cmake -G Ninja -S . -B build-asan -DCMAKE_BUILD_TYPE=RelWithDebInfo -DVEYAMUX_DXC_ROOT=.tools/dxc -DVEYAMUX_SANITIZE=ON
           cmake --build build-asan --target veyamux-live-test
 
       - name: Run the tests

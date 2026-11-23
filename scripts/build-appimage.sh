@@ -8,7 +8,7 @@
 #   python3 glslang-tools  (AMD FidelityFX shader generation)  qt6-shader-baker (qsb, HDR output shaders)  zsync (zsyncmake)
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BUILD="${BUILD_DIR:-$ROOT/build}"; APPDIR="$BUILD/AppDir"; OUT="${OUT_DIR:-$ROOT/dist}"
+BUILD="$(realpath -m "${BUILD_DIR:-$ROOT/build}")"; APPDIR="$BUILD/AppDir"; OUT="$(realpath -m "${OUT_DIR:-$ROOT/dist}")"
 "$ROOT/scripts/fetch-tools.sh"
 T="$ROOT/.tools"; export APPIMAGE_EXTRACT_AND_RUN=1 NO_STRIP=1   # works without FUSE (containers/CI)
 
