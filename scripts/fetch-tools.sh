@@ -7,7 +7,7 @@ T="$ROOT/.tools"; mkdir -p "$T/dxc" "$T/appimage"
 # ending up inside the AppImage.
 check() { echo "$2  $1" | sha256sum -c --quiet - || { echo "SHA-256 mismatch for $1 (got $(sha256sum "$1" | cut -d' ' -f1))"; rm -f "$1"; exit 1; }; }
 DXC_TAG=v1.9.2609
-DXC_SHA=PENDING
+DXC_SHA=96faadc7f5c282d2ffda49804beb4c3ee38127bc252b723234e3c5cdf7aa39a1
 if [ ! -x "$T/dxc/bin/dxc" ]; then
   if [ -n "${GITHUB_TOKEN:-}" ] && command -v gh >/dev/null; then   # CI: authenticated, no API rate limit
     GH_TOKEN="$GITHUB_TOKEN" gh release download "$DXC_TAG" -R microsoft/DirectXShaderCompiler -p 'linux_dxc*' -O "$T/dxc.tgz" --clobber
