@@ -595,7 +595,20 @@ private:
     QString psBusy_, psMessage_;
     bool psMessageError_ = false;
     std::thread psWorker_;
-    std::shared_ptr<std::atomic<bool>> psQuit_ = std::make_shared<std::atomic<bool>>(false);   // VeyAmux is closing
+    // Background threads (Remote Play, updates, the lsfg-vk download) hand their results to the UI through this. Once
+    // VeyAmux is closing nothing more is posted, and posting and closing never overlap (the lock), so a result can
+    // never reach a PlayerBridge that is being destroyed.
+    struct UiGate {
+        std::atomic<bool> closing{false};
+        std::mutex m;
+        bool load() const { return closing.load(); }
+        void close() { std::lock_guard l(m); closing = true; }
+        template <class F> void post(QObject* to, F&& f) {
+            std::lock_guard l(m);
+            if (!closing) QMetaObject::invokeMethod(to, std::forward<F>(f), Qt::QueuedConnection);
+        }
+    };
+    std::shared_ptr<UiGate> psQuit_ = std::make_shared<UiGate>();   // VeyAmux is closing
     QTimer* psTimer_ = nullptr;     // refreshes the console list while searching
     QVariantList psSeen_;           // last discovery result
     void psRun(const QString& busy, std::function<void(QString& message, bool& error)> work, std::function<void()> done = {});

@@ -112,6 +112,12 @@ int main(int argc, char** argv) {
         const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
         const QString now = base + "/VeyAmux/VeyAmux.conf", before = base + "/Veyra/Veyra.conf";
         if (!QFileInfo::exists(now) && QFileInfo::exists(before) && QDir().mkpath(base + "/VeyAmux")) QFile::copy(before, now);
+        // The settings hold the stream key and the PlayStation registration keys: only this user may read them.
+        // (Qt keeps a file's permissions when it rewrites it.)
+        QDir().mkpath(base + "/VeyAmux");
+        QFile::setPermissions(base + "/VeyAmux", QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+        if (!QFileInfo::exists(now)) { QFile f(now); f.open(QIODevice::WriteOnly); }
+        QFile::setPermissions(now, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
     }
     // `--watch`: no window, only the capture-card watcher (started from ~/.config/autostart)
     for (int i = 1; i < argc; ++i)

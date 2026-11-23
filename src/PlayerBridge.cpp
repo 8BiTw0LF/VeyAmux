@@ -187,7 +187,7 @@ PlayerBridge::~PlayerBridge() {
     saveSettings();
     veyamux::remoteplay::setRumbleCallback({});
     // a running Remote Play task (registration, wake-up: up to ~40 s) is not waited for
-    psQuit_->store(true);
+    psQuit_->close();
     if (psWorker_.joinable()) psWorker_.detach();
     veyamux::remoteplay::stopDiscovery();
     if (liveVk_) { liveVk_->setStream(-1, nullptr); liveVk_->setRecord(-1, nullptr); }
@@ -1489,14 +1489,14 @@ void PlayerBridge::installLsfg() {
         const auto r = lsfg::installV2([this, quit, last](int pc) {
             if (quit->load() || pc / 5 == last->load() / 5) return;
             last->store(pc);
-            QMetaObject::invokeMethod(this, [this, pc] {
+            quit->post(this, [this, pc] {
                 if (lsfgInstall_ != "busy") return;
                 lsfgInstallText_ = L("Downloading lsfg-vk 2 from builds.lsfg-vk.dev… %1 %", "Henter lsfg-vk 2 fra builds.lsfg-vk.dev… %1 %").arg(pc);
                 emit lsfgChanged();
-            }, Qt::QueuedConnection);
+            });
         });
         if (quit->load()) return;   // VeyAmux closed meanwhile
-        QMetaObject::invokeMethod(this, [this, r] {
+        quit->post(this, [this, r] {
             qInfo("Lossless Scaling: %s", qPrintable(r.message));
             lsfgInstall_ = r.ok ? "done" : "error";
             if (r.ok) {
@@ -1510,7 +1510,7 @@ void PlayerBridge::installLsfg() {
             }
             lsfg_ = lsfg::detect(QSettings().value("lsfg/folder").toString());
             emit lsfgChanged();
-        }, Qt::QueuedConnection);
+        });
     }).detach();
 }
 

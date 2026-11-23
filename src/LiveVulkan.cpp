@@ -127,6 +127,8 @@ void LiveVulkan::setActive(bool on) {
     if (!on) {
         std::lock_guard l(m_);
         hasNew_ = haveCurrent_ = redraw_ = false;
+        mailbox_.hold.reset(); mailbox_.ext = nullptr;   // capture buffers go back to the card
+        current_.hold.reset(); current_.ext = nullptr;
     }
     QMetaObject::invokeMethod(win_, "update", Qt::QueuedConnection);
 }
@@ -138,7 +140,12 @@ void LiveVulkan::submit(RawFrame& frame) {
         const double dt = std::chrono::duration<double, std::milli>(now - lastArrival_).count();
         lastArrival_ = now;
         if (dt > 4.0 && dt < 100.0) frameMs_ = 0.85 * frameMs_ + 0.15 * dt;
-        std::swap(mailbox_, frame);         // the newest frame always wins; an unrendered older one goes back for reuse
+        // the newest frame always wins; an unrendered older one goes back for reuse. A timeline jump (seek) it carried
+        // is not lost with it: the newer frame comes after the jump too.
+        const bool carry = hasNew_ && mailbox_.reset;
+        std::swap(mailbox_, frame);
+        if (carry) mailbox_.reset = true;
+        frame.reset = false;
         hasNew_ = true;
     }
     QMetaObject::invokeMethod(win_, "update", Qt::QueuedConnection);
@@ -153,6 +160,7 @@ void LiveVulkan::onBeforeRendering() {
         s = settings_;
         if (hasNew_) {
             std::swap(current_, mailbox_);
+            mailbox_.hold.reset(); mailbox_.ext = nullptr;   // the picture before is not drawn again: its buffer goes back
             hasNew_ = false;
             haveCurrent_ = true;
             redraw_ = false;
@@ -188,6 +196,7 @@ void LiveVulkan::onBeforeRendering() {
     in.data = current_.bytes();
     in.size = current_.size();
     in.w = current_.w; in.h = current_.h; in.stride = current_.stride;
+    in.fullRange = current_.fullRange;
     in.time = current_.captured.time_since_epoch().count() ? current_.captured : std::chrono::steady_clock::now();
 
     win_->beginExternalCommands();

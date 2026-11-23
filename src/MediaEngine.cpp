@@ -108,7 +108,19 @@ bool MediaEngine::openVideoDecoder(bool tryHw, std::string& error) {
 
 bool MediaEngine::open(const std::string& path, std::string& error, bool rawToGpu) {
     close();
-    int r = avformat_open_input(&fmt_, path.c_str(), nullptr, nullptr);
+    quit_ = false;
+    fmt_ = avformat_alloc_context();
+    if (!fmt_) { error = "Out of memory"; return false; }
+    // a stalled read (a network share, a stream) gives up when the player closes
+    fmt_->interrupt_callback.callback = [](void* self) { return static_cast<MediaEngine*>(self)->quit_.load() ? 1 : 0; };
+    fmt_->interrupt_callback.opaque = this;
+    AVDictionary* opts = nullptr;
+    const bool local = !path.empty() && path[0] == '/';
+    // a local file only reads local files (a playlist inside it cannot reach out to the network)
+    if (local) av_dict_set(&opts, "protocol_whitelist", "file", 0);
+    else av_dict_set(&opts, "rw_timeout", "15000000", 0);   // network: 15 s without data is an error
+    int r = avformat_open_input(&fmt_, path.c_str(), nullptr, &opts);
+    av_dict_free(&opts);
     if (r < 0) { error = "Could not open the file: " + avErr(r); fmt_ = nullptr; return false; }
     if ((r = avformat_find_stream_info(fmt_, nullptr)) < 0) {
         error = "Could not read stream info: " + avErr(r);
