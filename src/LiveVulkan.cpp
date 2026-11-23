@@ -158,6 +158,9 @@ void LiveVulkan::submit(RawFrame& frame) {
 // the compositor's next frame callback - the picture then waits for the compositor's clock, a varying part of a
 // refresh (jitter), on top of the GUI thread's queue. An UpdateRequest event, posted ahead of other events, makes the
 // render loop draw at once. VEYAMUX_QT_UPDATE=1: the old way, to compare.
+veyamux::GpuTimer::Sums LiveVulkan::gpuSums() const { return chain_ ? chain_->gpuSums() : veyamux::GpuTimer::Sums{}; }
+void LiveVulkan::resetGpuSums() { if (chain_) chain_->resetGpuSums(); }
+
 void LiveVulkan::requestFrame() {
     if (!win_) return;
     static const bool qtWay = qEnvironmentVariable("VEYAMUX_QT_UPDATE") == "1";
@@ -198,19 +201,24 @@ void LiveVulkan::onBeforeRendering() {
     }
 
     const auto t0 = std::chrono::steady_clock::now();
-    // VEYAMUX_DEBUG_PACE=1: where a picture's time goes, per picture (ms): capture -> due -> handed to the renderer ->
-    // drawing starts, and the gap to the previous drawing
-    static const bool paceLog = qEnvironmentVariableIsSet("VEYAMUX_DEBUG_PACE");
-    if (paceLog && current_.captured.time_since_epoch().count()) {
-        static std::chrono::steady_clock::time_point prevStart{};
+    // Where a picture's time goes (ms): capture -> pacer due -> handed to the renderer -> drawing starts, and the gap to
+    // the previous drawing. Kept for the diagnostic report; VEYAMUX_DEBUG_PACE=1 also logs every picture.
+    if (fresh && current_.captured.time_since_epoch().count()) {
+        static const bool paceLog = qEnvironmentVariableIsSet("VEYAMUX_DEBUG_PACE");
         auto ms = [](auto a, auto b) { return std::chrono::duration<double, std::milli>(b - a).count(); };
         const bool paced = current_.due.time_since_epoch().count() != 0;
-        qInfo("pace: due %+6.1f  handed %+6.1f  draw %+6.1f  total %6.1f  gap %6.1f",
-              paced ? ms(current_.captured, current_.due) : 0.0,
-              paced ? ms(current_.due, current_.arrived) : ms(current_.captured, current_.arrived),
-              ms(current_.arrived, t0), ms(current_.captured, t0),
-              prevStart.time_since_epoch().count() ? ms(prevStart, t0) : 0.0);
-        prevStart = t0;
+        PaceSample p;
+        p.due = paced ? ms(current_.captured, current_.due) : 0.0;
+        p.handed = paced ? ms(current_.due, current_.arrived) : ms(current_.captured, current_.arrived);
+        p.draw = ms(current_.arrived, t0);
+        p.total = ms(current_.captured, t0);
+        p.gap = prevDrawStart_.time_since_epoch().count() ? ms(prevDrawStart_, t0) : 0.0;
+        prevDrawStart_ = t0;
+        if (paceLog)
+            qInfo("pace: due %+6.1f  handed %+6.1f  draw %+6.1f  total %6.1f  gap %6.1f", p.due, p.handed, p.draw, p.total, p.gap);
+        std::lock_guard l(paceM_);
+        pace_.push_back(p);
+        while (pace_.size() > 900) pace_.pop_front();
     }
     if (current_.reset) { chain_->resetHistory(); current_.reset = false; }   // a video file was seeked
     LiveInput in;

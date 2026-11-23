@@ -113,6 +113,8 @@ public:
     // Measured GPU time (Vulkan timestamps), smoothed: total and per stage; -1 when not available.
     float gpuMs() const { return timer_.totalMs(); }
     std::array<float, GpuTimer::kStages> gpuStageMs() const { return timer_.stageMs(); }
+    GpuTimer::Sums gpuSums() const { return timer_.sums(); }
+    void resetGpuSums() { timer_.resetSums(); }
     std::string upError() const { return upError_; }
     FsrUpscaler* upscaler() { return fsrUp_.get(); }   // test hook
     uint64_t liveGeneration() const { return liveGen_; }

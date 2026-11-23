@@ -32,9 +32,15 @@ public:
     // Smoothed GPU milliseconds: total and per stage (-1 = stage did not run recently).
     float totalMs() const;
     std::array<float, kStages> stageMs() const;
+    // Unsmoothed sums since resetSums() (the benchmark): frames counted, total ms, and per stage ms (a stage that did
+    // not run in a frame adds 0) with the number of frames it ran in
+    struct Sums { int frames = 0; double total = 0; std::array<double, kStages> stage{}; std::array<int, kStages> ran{}; };
+    void resetSums();
+    Sums sums() const;
 
 private:
     void collect(int slot);
+    Sums sums_;
     VkDevice dev_ = VK_NULL_HANDLE;
     VkQueryPool pool_ = VK_NULL_HANDLE;
     double periodNs_ = 1.0;

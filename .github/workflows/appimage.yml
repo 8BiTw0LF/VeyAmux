@@ -1,6 +1,9 @@
 # Builds VeyAmux-x86_64.AppImage (+ .zsync for automatic updates) on GitHub.
 # - Every push to main / pull request: build and keep the AppImage as a workflow artifact (Actions tab).
 # - Pushing a tag such as VeyAmux-V.1.0: build and publish a GitHub release with both files attached.
+# - VeyAmux Debug (job "debug"): built on every push to main and published to the rolling pre-release "debug-build",
+#   which VeyAmux Debug updates itself from. Pre-releases are never "latest", so VeyAmux itself does not see them.
+# - Sanitizers (job "sanitizers"): the tests built with AddressSanitizer + UndefinedBehaviorSanitizer.
 name: AppImage
 
 on:
@@ -67,3 +70,101 @@ jobs:
           files: |
             ${{ env.SRC }}/dist/VeyAmux-x86_64.AppImage
             ${{ env.SRC }}/dist/VeyAmux-x86_64.AppImage.zsync
+
+  debug:
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    concurrency:
+      group: debug-build-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build g++ pkg-config patchelf file python3 curl glslang-tools zsync \
+            qt6-base-dev qt6-base-dev-tools qt6-declarative-dev qt6-svg-dev qt6-wayland qt6-shader-baker \
+            qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtquick-layouts qml6-module-qtqml-workerscript \
+            libvulkan-dev libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libswresample-dev \
+            libpulse-dev libva-dev libpipewire-0.3-dev mesa-vulkan-drivers \
+            libssl-dev libcurl4-openssl-dev libjson-c-dev libminiupnpc-dev libevent-dev libopus-dev
+
+      - name: Build VeyAmux Debug
+        working-directory: ${{ env.SRC }}
+        env:
+          VEYAMUX_FLAVOR: debug
+          VEYAMUX_BUILD_NUMBER: ${{ github.run_number }}
+          BUILD_DIR: build-debug
+          VEYAMUX_UPDATE_INFO: gh-releases-zsync|${{ github.repository_owner }}|${{ github.event.repository.name }}|debug-build|VeyAmux-Debug-x86_64.AppImage.zsync
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./scripts/build-appimage.sh
+
+      - name: Tests (software Vulkan)
+        working-directory: ${{ env.SRC }}
+        run: ./build-debug/veyamux-live-test build-debug/shaders
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: VeyAmux-Debug-x86_64.AppImage
+          path: |
+            ${{ env.SRC }}/dist/VeyAmux-Debug-x86_64.AppImage
+            ${{ env.SRC }}/dist/VeyAmux-Debug-x86_64.AppImage.zsync
+
+      - name: Publish the rolling debug pre-release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        working-directory: ${{ env.SRC }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          base=$(sed -n 's/^project(veyamux-linux VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          title="VeyAmux Debug ${base}.${{ github.run_number }}"
+          notes="Test build of VeyAmux from \`${GITHUB_SHA::10}\` (main). Runs next to VeyAmux with its own settings, a log file, crash backtraces, a full report and a benchmark (menu → Debug). It updates itself from this pre-release."
+          git tag -f debug-build "$GITHUB_SHA"
+          git push -f origin refs/tags/debug-build
+          if gh release view debug-build >/dev/null 2>&1; then
+            gh release edit debug-build --prerelease --title "$title" --notes "$notes"
+          else
+            gh release create debug-build --prerelease --latest=false --title "$title" --notes "$notes"
+          fi
+          gh release upload debug-build dist/VeyAmux-Debug-x86_64.AppImage dist/VeyAmux-Debug-x86_64.AppImage.zsync --clobber
+
+  sanitizers:
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    continue-on-error: true   # reports problems without holding up a release
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build g++ pkg-config patchelf file python3 curl glslang-tools zsync \
+            qt6-base-dev qt6-base-dev-tools qt6-declarative-dev qt6-svg-dev qt6-wayland qt6-shader-baker \
+            qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtquick-layouts qml6-module-qtqml-workerscript \
+            libvulkan-dev libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libswresample-dev \
+            libpulse-dev libva-dev libpipewire-0.3-dev mesa-vulkan-drivers \
+            libssl-dev libcurl4-openssl-dev libjson-c-dev libminiupnpc-dev libevent-dev libopus-dev
+
+      - name: Build the tests with ASan + UBSan
+        working-directory: ${{ env.SRC }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./scripts/fetch-tools.sh
+          cmake -G Ninja -S . -B build-asan -DCMAKE_BUILD_TYPE=RelWithDebInfo -DVEYAMUX_DXC_ROOT=.tools/dxc \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined" \
+            -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+          cmake --build build-asan --target veyamux-live-test
+
+      - name: Run the tests
+        working-directory: ${{ env.SRC }}
+        env:
+          ASAN_OPTIONS: detect_leaks=0:abort_on_error=1
+          UBSAN_OPTIONS: print_stacktrace=1
+        run: ./build-asan/veyamux-live-test build-asan/shaders

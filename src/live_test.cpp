@@ -31,6 +31,14 @@ int main(int argc, char** argv) {
     };
     const size_t tight = size_t(W) * H * 3 / 2;
     for (int i = 0; i < 4; ++i) frame(W, tight, 1280, 720, true);
+    // the benchmark's GPU sums count every measured frame
+    chain.resetGpuSums();
+    for (int i = 0; i < 4; ++i) frame(W, tight, 1280, 720, true);
+    {
+        const auto g = chain.gpuSums();
+        std::printf("GPU sums: %d frames, %.2f ms per frame\n", g.frames, g.frames ? g.total / g.frames : 0.0);
+        if (g.frames < 2) std::printf("note: no GPU timestamps counted (the driver may not support them)\n");
+    }
     const uint64_t gen = chain.liveGeneration();
     for (int i = 0; i < 20; ++i) frame(W, tight, 1000 + i * 16, 560 + i * 10, true);   // the window is dragged bigger
     std::printf("window resizes: %d new display generations\n", int(chain.liveGeneration() - gen));

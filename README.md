@@ -388,6 +388,27 @@ display. Turn VRR / adaptive sync off for VeyAmux.
 | Recording says "no usable video encoder" | VA-API needs the Mesa VA driver (`vainfo` should list HEVC / H.264 *EncSlice*). Bazzite has it. |
 | Lossless Scaling's extra frames are missing in OBS | The browser source gets the picture *before* lsfg-vk. Capture the VeyAmux window with OBS's *Screen Capture (PipeWire)* instead. |
 
+## VeyAmux Debug (test build)
+
+**[VeyAmux Debug](https://github.com/8BiTw0LF/VeyAmux/releases/tag/debug-build)** is a test build that is made after
+every change. Use it to try new things before a release and to send bug reports that show what went wrong on your
+hardware. It runs next to VeyAmux and does not touch it:
+- **Own settings** (`~/.config/VeyAmux/VeyAmux-Debug.conf`), copied from VeyAmux the first time, and its own Steam
+  shortcut. It updates itself from the debug channel.
+- **Menu → Debug:**
+  - **Full report:** one Markdown file in `~/Documents/VeyAmux reports` with everything a bug report needs. It
+    covers the machine, the graphics driver and Vulkan, the displays (refresh, VRR, HDR), the source and every
+    capture card mode, sound and Lossless Scaling. It also has frame timing (capture → pacer → renderer → drawing),
+    the settings, the log and earlier crashes. The stream key and the PlayStation keys are hidden. *Report on GitHub*
+    opens a new issue to drag the file into.
+  - **Benchmark:** runs the live picture through up to 19 settings for about 2½ minutes. For each one it measures the
+    GPU time of every stage, frame rate, jitter, delay, CPU and memory. The result is saved as a CSV file and goes
+    into the report.
+  - **Test switches:** turn parts of VeyAmux on or off (the old drawing path, copied capture, the older repeat
+    detection, the gamescope keep-alive and others) to find out what causes a problem.
+- **A log file** (`~/.local/share/VeyAmux/VeyAmux-Debug/debug/`, the last ten runs, FFmpeg's warnings included) and
+  **a crash backtrace** when it crashes. Both go into the next report. The AppImage carries debug symbols.
+
 ## Keyboard shortcuts
 
 **Space** play/pause · **←/→** ±5 s (Shift ±30 s) · **↑/↓** volume · **F** fullscreen · **E** enhancement on/off ·

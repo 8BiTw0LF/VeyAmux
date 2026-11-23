@@ -1,5 +1,6 @@
 // QML-facing wrapper around veyamux::MediaEngine.
 #pragma once
+#include <array>
 #include "AppUpdate.h"
 #include <algorithm>
 #include <cmath>
@@ -32,6 +33,14 @@
 class PlayerBridge : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool hasMedia READ hasMedia NOTIFY mediaChanged)
+    // VeyAmux Debug (PlayerBridgeDebug.cpp): the Debug tab, the full report and the benchmark
+    Q_PROPERTY(bool debugBuild READ debugBuild CONSTANT)
+    Q_PROPERTY(QString buildInfo READ buildInfo CONSTANT)
+    Q_PROPERTY(bool benchRunning READ benchRunning NOTIFY benchChanged)
+    Q_PROPERTY(QString benchText READ benchText NOTIFY benchChanged)
+    Q_PROPERTY(double benchProgress READ benchProgress NOTIFY benchChanged)
+    Q_PROPERTY(QString lastReport READ lastReport NOTIFY benchChanged)
+    Q_PROPERTY(bool debugRestartNeeded READ debugRestartNeeded NOTIFY benchChanged)
     // the demo scene (DemoSource.h): available in this build, running as the source, and how far its world is built
     Q_PROPERTY(bool demoAvailable READ demoAvailable CONSTANT)
     Q_PROPERTY(bool demoActive READ demoActive NOTIFY mediaChanged)
@@ -406,7 +415,23 @@ public:
     Q_INVOKABLE QVariantList setupCheck();          // [{id, kind, title, detail, fix}] (PlayerBridgeSetup.cpp)
     Q_INVOKABLE void applySetupFix(const QString& id);
     Q_INVOKABLE QString perfReport();
-    Q_INVOKABLE void copyPerfReport();       // F6: notes this moment of the recording in "<recording>-markers.txt"
+    Q_INVOKABLE void copyPerfReport();
+    // --- VeyAmux Debug ---
+    bool debugBuild() const;
+    QString buildInfo() const;
+    Q_INVOKABLE QString saveReport(const QString& note);   // the full report as a Markdown file; returns its path
+    Q_INVOKABLE void openReportFolder();
+    Q_INVOKABLE void reportOnGitHub(const QString& note);  // a new GitHub issue with the summary (the file is attached by hand)
+    Q_INVOKABLE void copyReportPath();
+    Q_INVOKABLE void startBenchmark();
+    Q_INVOKABLE void stopBenchmark();
+    bool benchRunning() const { return bench_.running; }
+    QString benchText() const { return bench_.text; }
+    double benchProgress() const { return bench_.steps.empty() ? 0.0 : double(bench_.step) / double(bench_.steps.size()); }
+    QString lastReport() const { return lastReport_; }
+    Q_INVOKABLE QVariantList debugSwitches() const;        // [{env, title, detail, on}]
+    Q_INVOKABLE void setDebugSwitch(const QString& env, bool on);
+    bool debugRestartNeeded() const { return debugRestart_; }       // F6: notes this moment of the recording in "<recording>-markers.txt"
     int markers() const { return int(markers_.size()); }
     QString updateState() const { return updState_; }
     QString updateVersion() const { return updRelease_.version; }
@@ -555,6 +580,7 @@ signals:
     void recChanged();
     void overlayChanged();
     void overlayTick();
+    void benchChanged();
     void recTick();
 
 private:
@@ -616,6 +642,30 @@ private:
         }
     };
     bool gamescope_ = false, pointerHidden_ = false;
+    // the benchmark: one step = settings for a few seconds, measured (PlayerBridgeDebug.cpp)
+    struct BenchStep { QString name; std::function<void(veyamux::EnhanceSettings&)> set; };
+    struct BenchRow { QString name; double fps = 0, frameMs = 0, jitter = 0, p99 = 0, delay = 0, gpu = 0, cpu = 0, rssMb = 0;
+                      std::array<double, 6> stages{}; int samples = 0; };
+    struct Bench {
+        bool running = false;
+        std::vector<BenchStep> steps;
+        size_t step = 0;
+        veyamux::EnhanceSettings saved;
+        QString text, source;
+        std::vector<BenchRow> rows;
+        BenchRow cur;
+        double t0 = 0;                      // ms (steady clock) when measuring this step began
+        long long cpuTicks0 = 0;
+        QTimer* timer = nullptr;
+        int phase = 0;                      // 0 settle, 1 measure
+        QString csv;                        // the last result file
+    } bench_;
+    QString lastReport_;
+    bool debugRestart_ = false;
+    void benchTick();
+    void benchApplyStep();
+    QString benchTable() const;
+    QString paceSummary();
     QElapsedTimer nudgeUntil_;
     std::shared_ptr<UiGate> psQuit_ = std::make_shared<UiGate>();   // VeyAmux is closing
     QTimer* psTimer_ = nullptr;     // refreshes the console list while searching
