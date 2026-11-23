@@ -289,6 +289,11 @@ bool MediaEngine::openCapture(const std::string& devicePath, const CaptureMode& 
 void MediaEngine::captureLoop() {
     FramePacingRepair repair;
     auto lastPaced = std::chrono::steady_clock::time_point{};
+    // How long a repaired picture is held after its even-grid time: just enough that the latest one of recent frames
+    // (decoding an MJPEG picture takes a while) is still ready in time. A fixed amount would show the late ones late
+    // (uneven again) or hold every picture longer than needed.
+    double holdMs = 0.0;
+    std::deque<double> lateness;   // ms from the grid time to the moment the picture was ready, recent frames
     std::vector<uint8_t> rgba;
     RawFrame raw;
     int idle = 0;
@@ -362,7 +367,7 @@ void MediaEngine::captureLoop() {
         if (toGpu) {
             if (pacingRepair_.load() && skipRepeats_.load() && cb_.onLiveFrame) {
                 // even out a locked game's uneven showing: hand the picture to the pacer thread with its due time
-                if (pacingReset_.exchange(false)) repair.reset();
+                if (pacingReset_.exchange(false)) { repair.reset(); lateness.clear(); holdMs = 0.0; }
                 const double fps = cap_->fps() > 1.0 ? cap_->fps() : 60.0;
                 const int64_t transport = int64_t(1e7 / fps);   // one capture refresh, 100 ns
                 const auto captured = raw.captured.time_since_epoch().count() ? raw.captured : clk::now();
@@ -372,8 +377,17 @@ void MediaEngine::captureLoop() {
                 lastPaced = clk::now();
                 ++pacedTotal_;
                 if (res.repaired) ++pacedRepaired_;
-                // + one refresh: the grid line may lie up to one refresh before the arrival
-                const auto due = captured + std::chrono::nanoseconds((res.shift + transport) * 100);
+                // the picture's time on the even grid (its own arrival when there is nothing to even out), then held
+                // by holdMs so that every recent picture was ready by then: an even rhythm, and no more delay than needed
+                const auto grid = captured + std::chrono::nanoseconds(res.shift * 100);
+                lateness.push_back(std::chrono::duration<double, std::milli>(clk::now() - grid).count());
+                while (lateness.size() > 90) lateness.pop_front();   // ~1.5-3 s
+                const double need = *std::max_element(lateness.begin(), lateness.end()) + 1.0;   // + 1 ms margin
+                // up at once (a late picture would break the rhythm), down slowly (no visible step)
+                holdMs = need > holdMs ? need : std::max(need, holdMs - 0.25);
+                holdMs = std::clamp(holdMs, 0.0, 2.0 * double(transport) / 1e4);
+                pacingHold_ = holdMs;
+                const auto due = grid + std::chrono::microseconds(int64_t(holdMs * 1000.0));
                 std::lock_guard l(pace_m_);
                 while (paced_.size() >= 2) paced_.pop_front();   // never pile up: latency first
                 paced_.push_back({due, std::move(raw)});

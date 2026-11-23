@@ -446,9 +446,9 @@ void PlayerBridge::updateOverlay() {
                 pacingClock_.start();
             }
             if (pacingShown_ >= 0)
-                s += L("\nFrame pacing repair: %1 % of the pictures moved to an even rhythm (+1 refresh of delay)",
-                       "\nRetter billedrytme: %1 % af billederne flyttet til en jævn rytme (+1 skærmopdatering forsinkelse)")
-                         .arg(int(std::lround(pacingShown_ * 100)));
+                s += L("\nFrame pacing repair: %1 % of the pictures moved to an even rhythm (held %2 ms)",
+                       "\nRetter billedrytme: %1 % af billederne flyttet til en jævn rytme (holdt %2 ms)")
+                         .arg(int(std::lround(pacingShown_ * 100))).arg(engine_.pacingHoldMs(), 0, 'f', 1);
         }
         // Remote Play: the delay from the console, as far as it can be measured (the console's own encoding cannot;
         // a PS5 / PS4 typically needs 5-10 ms for it)
