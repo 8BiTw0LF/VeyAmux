@@ -452,7 +452,11 @@ public:
 
 public slots:
     QVariantList captureDevices();
+    // [{label, favorite, recommended}]: the user's favourite signals first (last used on top), then the built-in order
     QVariantList captureModes(const QString& path);
+    // marks or unmarks a mode of the last list as a favourite; false when there are already maxFavoriteModes()
+    bool toggleFavoriteMode(int modeIndex);
+    int maxFavoriteModes() const;
     // A word on the chosen mode of the last captureModes() list: a compressed (MJPEG) mode where the card also has an
     // uncompressed one, and at which cost (after PushFPS 4.1). Empty when there is nothing to say.
     QString modeAdvice(int modeIndex) const;

@@ -1209,12 +1209,47 @@ QString PlayerBridge::captureHelp() const {
     return {};
 }
 
+// Favourite signals: up to three modes the user marked, kept in "cap/favorites" with the most recently used first.
+// They head the mode list in that order (so the first is the one used last); the rest follow in the built-in order.
+namespace {
+QString modeKey(const veyamux::CaptureMode& m) {
+    return QStringLiteral("%1:%2x%3@%4").arg(m.fourcc).arg(m.w).arg(m.h).arg(std::lround(m.fps * 100));
+}
+constexpr int kMaxFavorites = 3;
+}
+
 QVariantList PlayerBridge::captureModes(const QString& path) {
     lastModes_ = veyamux::listCaptureModes(path.toStdString());
+    const QStringList favs = QSettings().value("cap/favorites").toStringList();
+    std::vector<veyamux::CaptureMode> front;
+    for (const QString& f : favs)
+        for (auto it = lastModes_.begin(); it != lastModes_.end(); ++it)
+            if (modeKey(*it) == f) { front.push_back(*it); lastModes_.erase(it); break; }
+    const bool recommendedFirst = front.empty();
+    lastModes_.insert(lastModes_.begin(), front.begin(), front.end());
     QVariantList out;
-    for (const auto& m : lastModes_) out << QString::fromStdString(m.label);
+    for (size_t i = 0; i < lastModes_.size(); ++i) {
+        QVariantMap e;
+        e["label"] = QString::fromStdString(lastModes_[i].label);
+        e["favorite"] = i < front.size();
+        e["recommended"] = recommendedFirst && i == 0;
+        out << e;
+    }
     return out;
 }
+
+bool PlayerBridge::toggleFavoriteMode(int modeIndex) {
+    if (modeIndex < 0 || modeIndex >= int(lastModes_.size())) return false;
+    QStringList favs = QSettings().value("cap/favorites").toStringList();
+    const QString k = modeKey(lastModes_[size_t(modeIndex)]);
+    if (favs.contains(k)) favs.removeAll(k);
+    else if (favs.size() >= kMaxFavorites) return false;   // full: the user removes one first
+    else favs.prepend(k);
+    QSettings().setValue("cap/favorites", favs);
+    return true;
+}
+
+int PlayerBridge::maxFavoriteModes() const { return kMaxFavorites; }
 
 namespace {
 // i18n/messages.json: { "<language>": { "<English text>": "<translation>" } }
@@ -1329,6 +1364,10 @@ QString PlayerBridge::lastCaptureAudio() const { return QSettings().value("cap/a
 
 bool PlayerBridge::openCapture(const QString& path, int modeIndex, const QString& audioSource) {
     if (modeIndex < 0 || modeIndex >= int(lastModes_.size())) { setStatus(L("No capture mode selected", "Ingen capture-tilstand valgt")); return false; }
+    // a favourite that is used moves to the top of the favourites
+    QStringList favs = QSettings().value("cap/favorites").toStringList();
+    const QString k = modeKey(lastModes_[size_t(modeIndex)]);
+    if (favs.contains(k) && favs.first() != k) { favs.removeAll(k); favs.prepend(k); QSettings().setValue("cap/favorites", favs); }
     return startCapture(path, lastModes_[size_t(modeIndex)], audioSource);
 }
 

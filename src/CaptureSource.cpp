@@ -234,6 +234,24 @@ void orderCaptureModes(std::vector<CaptureMode>& modes) {
             modes.erase(modes.begin() + second);
             modes.insert(modes.begin(), next);
         }
+        // between them: 1080p uncompressed at the same rate (a quarter of the USB traffic, so much less delay; VeyAmux
+        // can enlarge it again)
+        if (top.h > 1080) {
+            int mid = -1;
+            for (int i = 0; i < int(modes.size()); ++i) {
+                const auto& m = modes[size_t(i)];
+                if (m.h != 1080 || !raw(m)) continue;
+                const auto score = [&](const CaptureMode& x) {   // same rate as the top first, then NV12
+                    return (std::abs(x.fps - top.fps) <= 0.5 ? 2 : 0) + (x.fourcc == V4L2_PIX_FMT_NV12 ? 1 : 0);
+                };
+                if (mid < 0 || score(m) > score(modes[size_t(mid)])) mid = i;
+            }
+            if (mid >= 0) {
+                const CaptureMode m = modes[size_t(mid)];
+                modes.erase(modes.begin() + mid);
+                modes.insert(modes.begin(), m);   // ahead of the faster variant
+            }
+        }
         modes.insert(modes.begin(), top);
     }
 }
