@@ -119,7 +119,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          base=$(sed -n 's/^project(veyamux-linux VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          base=$(sed -n 's/^project(veyamux-linux VERSION \([0-9]*\.[0-9]*\).*/\1/p' CMakeLists.txt)   # major.minor (see Diagnostics::buildVersion)
           title="VeyAmux Debug ${base}.${{ github.run_number }}"
           notes="Test build of VeyAmux from \`${GITHUB_SHA::10}\` (main). Runs next to VeyAmux with its own settings, a log file, crash backtraces, a full report and a benchmark (menu → Debug). It updates itself from this pre-release."
           git tag -f debug-build "$GITHUB_SHA"
