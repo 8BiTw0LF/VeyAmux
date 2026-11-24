@@ -29,6 +29,7 @@
 #include <cmath>
 #include <unistd.h>
 #include <vulkan/vulkan.h>
+#include <linux/videodev2.h>
 
 using veyamux::EnhanceSettings;
 namespace diag = veyamux::diag;
@@ -294,6 +295,30 @@ void PlayerBridge::reportOnGitHub(const QString& note) {
 
 // ---------------------------------------------------------------------------------------------------------------
 // Benchmark
+//
+// 1. Prepare: every step's settings for a moment, so all shaders and images exist before anything is measured (the
+//    first use of a pass builds its pipeline, a hitch that used to land in a measurement).
+// 2. Each step: settle, then measure: frame times of the drawn pictures, unsmoothed GPU time per stage, delay, CPU per
+//    thread and memory. A step whose frame rate or jitter is off from the plain picture's is measured again once; if
+//    it stays off it is flagged (then it is a real result: the GPU or the pacing did not keep up).
+// 3. On a 4K capture card, the upscaling steps run on the card's 1080p mode (same rate), then the card goes back.
+
+namespace {
+std::map<int, std::pair<QString, long long>> threadTicks() {
+    std::map<int, std::pair<QString, long long>> out;
+    QDir d("/proc/self/task");
+    for (const QString& tid : d.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+        QFile f(d.filePath(tid) + "/stat");
+        if (!f.open(QIODevice::ReadOnly)) continue;
+        const QString st = QString::fromLatin1(f.readAll());
+        const int l = st.indexOf('('), r = st.lastIndexOf(')');
+        if (l < 0 || r < l) continue;
+        const QStringList p = st.mid(r + 2).split(' ');
+        if (p.size() > 13) out[tid.toInt()] = {st.mid(l + 1, r - l - 1), p[11].toLongLong() + p[12].toLongLong()};
+    }
+    return out;
+}
+} // namespace
 
 void PlayerBridge::startBenchmark() {
     if (bench_.running) return;
@@ -306,114 +331,252 @@ void PlayerBridge::startBenchmark() {
     bench_ = Bench{};
     bench_.saved = s_;
     bench_.source = title();
+    bench_.savedMode = curMode_;
+    bench_.device = curDevice_;
+    bench_.audio = curAudio_;
     const int srcH = engine_.info().height > 0 ? engine_.info().height : 1080;
-    const bool canUpscale = srcH <= 1440;       // 2× of 4K would be 8K
-    const bool fsrFgAllowed = !s_.lsfgFg() && !lsfgActive_;
+    const bool card = curMode_.fourcc != 0;
+    const bool lsfgOn = s_.lsfgFg() || lsfgActive_;
+    const bool fgOn = s_.frameGen != veyamux::FrameGenMode::Off;
+
+    // a 4K card: its uncompressed 1080p mode at the same rate, for the upscaling steps
+    bool lowRes = false;
+    if (srcH > 1440 && card) {
+        double best = 1e9;
+        for (const auto& m : veyamux::listCaptureModes(curDevice_.toStdString())) {
+            if (m.h != 1080 || m.fourcc == 0 || m.fourcc == V4L2_PIX_FMT_MJPEG || m.fourcc == V4L2_PIX_FMT_P010) continue;
+            const double d = std::abs(m.fps - curMode_.fps) + (m.fourcc == V4L2_PIX_FMT_NV12 ? 0 : 0.1);
+            if (d < best) { best = d; bench_.lowMode = m; lowRes = true; }
+        }
+        if (!lowRes) bench_.notes << L("Upscaling left out: the card has no uncompressed 1080p mode, and 2× of 4K would be 8K.",
+                                       "Opskalering udeladt: kortet har ingen ukomprimeret 1080p-tilstand, og 2× af 4K ville give 8K.");
+    } else if (srcH > 1440) {
+        bench_.notes << L("Upscaling left out: the source is 4K (2× would be 8K). Use a 1080p source to include it.",
+                          "Opskalering udeladt: kilden er 4K (2× ville give 8K). Brug en 1080p-kilde for at få den med.");
+    }
+    const bool upNative = srcH <= 1440;
+
     auto base = [](EnhanceSettings& e) {
         e.enabled = true; e.scale = 1.0f; e.upscaler = veyamux::Upscaler::Sgsr; e.fxaa = false; e.smaa = false;
         e.deflicker = false; e.denoise = veyamux::Denoise::Off; e.sharpen = 0; e.texture = e.clarity = e.dehaze = 0;
         e.retroTv = false; e.pixelPerfect = false; e.hudLock = false;
         if (e.frameGen == veyamux::FrameGenMode::FsrFree) e.frameGen = veyamux::FrameGenMode::Off;
     };
-    auto add = [&](const QString& name, std::function<void(EnhanceSettings&)> f) {
-        bench_.steps.push_back({name, [base, f](EnhanceSettings& e) { base(e); if (f) f(e); }});
+    auto add = [&](const QString& section, const QString& name, std::function<void(EnhanceSettings&)> f, bool low = false, bool more = false) {
+        bench_.steps.push_back({section, name, [base, f](EnhanceSettings& e) { base(e); if (f) f(e); }, low, more});
     };
-    add("Enhance off", [](EnhanceSettings& e) { e.enabled = false; });
-    add("Enhance on, nothing else", nullptr);
+    using veyamux::Denoise;
+    using veyamux::Upscaler;
+    const QString P = "Picture", N = "Noise reduction", M = "Motion (shared estimate)", U = "Upscaling", G = "Frame generation",
+                  T = "Pacing", H = "Combined";
+    add(P, "Enhance off", [](EnhanceSettings& e) { e.enabled = false; });
+    add(P, "Enhance on, nothing else", nullptr);
+    add(P, "Sharpness 0.5", [](EnhanceSettings& e) { e.sharpen = 0.5f; });
+    add(P, "Texture, clarity, dehaze", [](EnhanceSettings& e) { e.texture = 0.3f; e.clarity = 0.3f; e.dehaze = 0.2f; });
+    add(P, "FXAA high", [](EnhanceSettings& e) { e.fxaa = true; e.fxaaQuality = 1; });
+    add(P, "SMAA high", [](EnhanceSettings& e) { e.fxaa = true; e.smaa = true; e.fxaaQuality = 1; });
+    add(P, "SMAA ultra", [](EnhanceSettings& e) { e.fxaa = true; e.smaa = true; e.fxaaQuality = 2; });
+    add(P, "Retro TV (240 lines)", [](EnhanceSettings& e) { e.retroTv = true; e.retroLines = 240; });
     const char* str[] = {"light", "medium", "strong"};
-    for (int k = 0; k < 3; ++k)
-        add(QString("Noise reduction spatial %1").arg(str[k]), [k](EnhanceSettings& e) { e.denoise = veyamux::Denoise::Spatial; e.denoiseStrength = k; });
-    add("Noise reduction temporal medium", [](EnhanceSettings& e) { e.denoise = veyamux::Denoise::Temporal; e.denoiseStrength = 1; });
-    add("Noise reduction both medium", [](EnhanceSettings& e) { e.denoise = veyamux::Denoise::Both; e.denoiseStrength = 1; });
-    add("Anti-flicker", [](EnhanceSettings& e) { e.deflicker = true; });
-    add("FXAA high", [](EnhanceSettings& e) { e.fxaa = true; e.fxaaQuality = 1; });
-    add("SMAA high", [](EnhanceSettings& e) { e.fxaa = true; e.smaa = true; e.fxaaQuality = 1; });
-    add("Sharpness 0.5", [](EnhanceSettings& e) { e.sharpen = 0.5f; });
-    add("Texture, clarity, dehaze", [](EnhanceSettings& e) { e.texture = 0.3f; e.clarity = 0.3f; e.dehaze = 0.2f; });
-    add("FSR 3.1 native (TAA)", [](EnhanceSettings& e) { e.upscaler = veyamux::Upscaler::AmdFsr3; });
-    if (canUpscale) {
-        add("Upscale 2× SGSR", [](EnhanceSettings& e) { e.scale = 2; e.upscaler = veyamux::Upscaler::Sgsr; });
-        add("Upscale 2× FSR 1", [](EnhanceSettings& e) { e.scale = 2; e.upscaler = veyamux::Upscaler::AmdFsr1; });
-        add("Upscale 2× NIS", [](EnhanceSettings& e) { e.scale = 2; e.upscaler = veyamux::Upscaler::Nis; });
-        add("Upscale 2× FSR 3.1", [](EnhanceSettings& e) { e.scale = 2; e.upscaler = veyamux::Upscaler::AmdFsr3; });
+    const std::pair<Denoise, const char*> nr[] = {{Denoise::Spatial, "spatial"}, {Denoise::Temporal, "temporal"}, {Denoise::Both, "both"}};
+    for (const auto& [mode, label] : nr)
+        for (int k = 0; k < 3; ++k)
+            add(N, QString("%1 %2").arg(label, str[k]), [mode = mode, k](EnhanceSettings& e) { e.denoise = mode; e.denoiseStrength = k; });
+    add(M, "Anti-flicker", [](EnhanceSettings& e) { e.deflicker = true; });
+    add(M, "Anti-flicker + temporal medium", [](EnhanceSettings& e) { e.deflicker = true; e.denoise = Denoise::Temporal; e.denoiseStrength = 1; });
+    add(M, "FSR 3.1 native (TAA)", [](EnhanceSettings& e) { e.upscaler = Upscaler::AmdFsr3; });
+    add(M, "FSR 3.1 native + temporal medium", [](EnhanceSettings& e) { e.upscaler = Upscaler::AmdFsr3; e.denoise = Denoise::Temporal; e.denoiseStrength = 1; });
+    if (upNative || lowRes) {
+        const bool low = !upNative;
+        if (low) add(U, "1080p: enhance on, nothing else", nullptr, true);
+        const std::pair<Upscaler, const char*> ups[] = {{Upscaler::Sgsr, "SGSR"}, {Upscaler::AmdFsr1, "FSR 1"}, {Upscaler::Nis, "NIS"}, {Upscaler::AmdFsr3, "FSR 3.1"}};
+        for (const auto& [up, label] : ups)
+            add(U, QString("%1Upscale 2× %2").arg(low ? "1080p: " : "", label), [up = up](EnhanceSettings& e) { e.scale = 2; e.upscaler = up; }, low);
+        add(U, QString("%1Upscale 1.5× FSR 3.1").arg(low ? "1080p: " : ""), [](EnhanceSettings& e) { e.scale = 1.5f; e.upscaler = Upscaler::AmdFsr3; }, low);
+        add(U, QString("%1Heavy: both medium + anti-flicker + SMAA + 2× FSR 3.1").arg(low ? "1080p: " : ""), [](EnhanceSettings& e) {
+            e.denoise = Denoise::Both; e.denoiseStrength = 1; e.deflicker = true; e.fxaa = true; e.smaa = true;
+            e.upscaler = Upscaler::AmdFsr3; e.scale = 2;
+        }, low);
     }
-    if (fsrFgAllowed) add("FSR 3.1.6 frame generation", [](EnhanceSettings& e) { e.frameGen = veyamux::FrameGenMode::FsrFree; });
-    add(canUpscale ? "Heavy: both medium + anti-flicker + SMAA + 2× FSR 3.1" : "Heavy: both medium + anti-flicker + SMAA + FSR 3.1 native",
-        [canUpscale](EnhanceSettings& e) {
-            e.denoise = veyamux::Denoise::Both; e.denoiseStrength = 1; e.deflicker = true; e.fxaa = true; e.smaa = true;
-            e.upscaler = veyamux::Upscaler::AmdFsr3; e.scale = canUpscale ? 2.0f : 1.0f;
-        });
+    if (!lsfgOn) {
+        add(G, "FSR 3.1.6 frame generation", [](EnhanceSettings& e) { e.frameGen = veyamux::FrameGenMode::FsrFree; }, false, true);
+        add(G, "FSR 3.1.6 frame generation + HUD lock", [](EnhanceSettings& e) { e.frameGen = veyamux::FrameGenMode::FsrFree; e.hudLock = true; }, false, true);
+    } else {
+        bench_.notes << L("FSR 3.1.6 frame generation left out: Lossless Scaling is on (it needs a restart to switch). Set frame generation to Off to include it.",
+                          "FSR 3.1.6 frame generation udeladt: Lossless Scaling er slået til (skift kræver genstart). Sæt frame generation til Fra for at få den med.");
+        bench_.notes << L("Lossless Scaling's own frames are made after VeyAmux (in lsfg-vk) and are not part of these numbers.",
+                          "Lossless Scalings egne billeder laves efter VeyAmux (i lsfg-vk) og er ikke med i tallene.");
+    }
+    if (fgOn) {
+        add(T, "Even out frame pacing off", [](EnhanceSettings& e) { e.pacingRepair = false; });
+        add(T, "Even out frame pacing on", [](EnhanceSettings& e) { e.pacingRepair = true; });
+    } else {
+        bench_.notes << L("Frame pacing left out: it only works with frame generation on.",
+                          "Billedrytme udeladt: den virker kun med frame generation slået til.");
+    }
+    add(H, "Heavy: both medium + anti-flicker + SMAA + FSR 3.1 native", [](EnhanceSettings& e) {
+        e.denoise = Denoise::Both; e.denoiseStrength = 1; e.deflicker = true; e.fxaa = true; e.smaa = true; e.upscaler = Upscaler::AmdFsr3;
+    });
+    // the 1080p steps last, so the card changes mode only once (and back)
+    std::stable_partition(bench_.steps.begin(), bench_.steps.end(), [](const BenchStep& st) { return !st.lowRes; });
+
     bench_.running = true;
+    bench_.phase = 0;
+    bench_.prep = 0;
+    bench_.t0 = nowMs();
     bench_.timer = new QTimer(this);
     connect(bench_.timer, &QTimer::timeout, this, [this] { benchTick(); });
-    bench_.timer->start(250);
-    benchApplyStep();
+    bench_.timer->start(100);
     qInfo("Benchmark: %d steps on %s", int(bench_.steps.size()), qPrintable(bench_.source));
+    for (const QString& n : bench_.notes) qInfo("Benchmark: %s", qPrintable(n));
 }
 
 void PlayerBridge::benchApplyStep() {
+    const BenchStep& st = bench_.steps[bench_.step];
     EnhanceSettings e = bench_.saved;
-    bench_.steps[bench_.step].set(e);
+    st.set(e);
     s_ = e;
     applyEnhance();
-    bench_.phase = 0;
+    bench_.phase = 1;
     bench_.t0 = nowMs();
     bench_.cur = BenchRow{};
-    bench_.cur.name = bench_.steps[bench_.step].name;
-    bench_.text = L("Benchmark %1/%2: %3", "Benchmark %1/%2: %3").arg(bench_.step + 1).arg(bench_.steps.size()).arg(bench_.cur.name);
+    bench_.cur.section = st.section;
+    bench_.cur.name = st.name;
+    bench_.text = L("Benchmark %1/%2: %3%4", "Benchmark %1/%2: %3%4")
+                      .arg(bench_.step + 1).arg(bench_.steps.size()).arg(st.name)
+                      .arg(bench_.retried ? L(" (again)", " (igen)") : QString());
     emit benchChanged();
 }
 
 void PlayerBridge::benchTick() {
     if (!bench_.running) return;
-    if (!hasMedia() || !liveVulkanActive()) { stopBenchmark(); return; }
     const double t = nowMs();
-    static const bool fast = qEnvironmentVariableIsSet("VEYAMUX_BENCH_FAST");   // tests: 0.5 + 1 s per step
-    const double kSettle = fast ? 500 : 2500, kMeasure = fast ? 1000 : 5000;
-    if (bench_.phase == 0) {
+    static const bool fast = qEnvironmentVariableIsSet("VEYAMUX_BENCH_FAST");   // tests: much shorter
+    const double kPrep = fast ? 150 : 600, kSettle = fast ? 300 : 1500, kMeasure = fast ? 800 : 5000, kRestart = fast ? 1500 : 6000;
+
+    if (bench_.phase == 3) {   // the card changes mode: wait until the new mode delivers pictures
+        if (t - bench_.t0 < kRestart || !hasMedia() || !liveVulkanActive()) {
+            if (t - bench_.t0 > 30000) { bench_.notes << "The card did not come back in its 1080p mode."; stopBenchmark(); }
+            return;
+        }
+        bench_.phase = 0;                // prepare the 1080p steps' passes too
+        bench_.prep = bench_.step;
+        bench_.t0 = t;
+        return;
+    }
+    if (!hasMedia() || !liveVulkanActive()) { stopBenchmark(); return; }
+
+    if (bench_.phase == 0) {   // prepare: every step of the native source briefly
+        if (t - bench_.t0 < kPrep && bench_.prep > bench_.step) return;
+        while (bench_.prep < bench_.steps.size() && bench_.steps[bench_.prep].lowRes != bench_.onLowRes) ++bench_.prep;
+        if (bench_.prep >= bench_.steps.size()) { bench_.retried = false; benchApplyStep(); return; }
+        EnhanceSettings e = bench_.saved;
+        bench_.steps[bench_.prep].set(e);
+        s_ = e;
+        applyEnhance();
+        bench_.text = L("Benchmark: preparing %1/%2", "Benchmark: forbereder %1/%2").arg(bench_.prep + 1).arg(bench_.steps.size());
+        emit benchChanged();
+        ++bench_.prep;
+        bench_.t0 = t;
+        return;
+    }
+    if (bench_.phase == 1) {
         if (t - bench_.t0 < kSettle) return;
-        bench_.phase = 1;
+        bench_.phase = 2;
         bench_.t0 = t;
         bench_.cpuTicks0 = cpuTicks();
+        bench_.threads0 = threadTicks();
         liveVk_->resetGpuSums();
         return;
     }
+    // phase 2: measuring
     auto& r = bench_.cur;
     r.delay += liveVk_->pipelineMs();
     ++r.samples;
     if (t - bench_.t0 < kMeasure) return;
+    const double secs = (t - bench_.t0) / 1000.0;
     if (r.samples) r.delay /= r.samples;
-    // GPU time: the average of every frame drawn while measuring (a stage counts only in the frames it ran in)
     const auto g = liveVk_->gpuSums();
+    r.gpuFrames = g.frames;
     r.gpu = g.frames ? g.total / g.frames : -1;
     for (size_t k = 0; k < r.stages.size() && k < g.stage.size(); ++k) r.stages[k] = g.ran[k] ? g.stage[k] / g.ran[k] : -1;
-    // frame times of the measuring window
     std::vector<double> shown = liveVk_->shownTimes(), iv;
     for (size_t i = 1; i < shown.size(); ++i)
-        if (shown[i] >= bench_.t0) iv.push_back(shown[i] - shown[i - 1]);
+        if (shown[i - 1] >= bench_.t0) iv.push_back(shown[i] - shown[i - 1]);
     if (iv.size() >= 4) {
-        const Spread s = spread(iv);
-        r.frameMs = s.mean; r.fps = 1000.0 / s.mean; r.jitter = s.sd; r.p99 = s.p99;
+        const Spread sp = spread(iv);
+        r.frameMs = sp.mean; r.fps = 1000.0 / sp.mean; r.jitter = sp.sd; r.p99 = sp.p99;
     }
-    r.cpu = double(cpuTicks() - bench_.cpuTicks0) / double(sysconf(_SC_CLK_TCK)) / ((t - bench_.t0) / 1000.0) * 100.0;
+    const double tck = double(sysconf(_SC_CLK_TCK));
+    r.cpu = double(cpuTicks() - bench_.cpuTicks0) / tck / secs * 100.0;
     r.rssMb = rssMb();
+    {   // CPU per thread (by name), the busiest first
+        std::map<QString, double> byName;
+        for (const auto& [tid, now] : threadTicks()) {
+            const auto it = bench_.threads0.find(tid);
+            const long long d = now.second - (it != bench_.threads0.end() ? it->second.second : 0);
+            if (d > 0) byName[now.first] += double(d) / tck / secs * 100.0;
+        }
+        std::vector<std::pair<double, QString>> v;
+        for (const auto& [n, pc] : byName) if (pc >= 0.5) v.push_back({pc, n});
+        std::sort(v.rbegin(), v.rend());
+        QStringList parts;
+        for (size_t i = 0; i < v.size() && i < 5; ++i) parts << QStringLiteral("%1 %2").arg(v[i].second).arg(v[i].first, 0, 'f', 0);
+        r.threads = parts.join(", ");
+    }
+    {
+        const auto& in = engine_.info();
+        r.source = QStringLiteral("%1×%2").arg(in.width).arg(in.height);
+        if (curMode_.fourcc) r.source = QString::fromStdString(curMode_.label);
+    }
+    // the plain picture sets the reference; a step far from it is measured again once, then flagged
+    const BenchStep& st = bench_.steps[bench_.step];
+    if (st.name == "Enhance on, nothing else" || st.name == "1080p: enhance on, nothing else") { bench_.refFps = r.fps; bench_.refJitter = r.jitter; }
+    bool odd = false;
+    if (!st.moreFrames && bench_.refFps > 0 && r.fps > 0)
+        odd = std::abs(r.fps - bench_.refFps) / bench_.refFps > 0.03 || r.jitter > std::max(1.0, 4.0 * bench_.refJitter);
+    if (r.fps <= 0) odd = true;
+    if (odd && !bench_.retried) { bench_.retried = true; benchApplyStep(); return; }
+    if (bench_.retried) r.flag = r.fps <= 0 ? QStringLiteral("no pictures") : odd ? QStringLiteral("uneven") : QStringLiteral("re-measured");
     bench_.rows.push_back(r);
-    if (++bench_.step < bench_.steps.size()) { benchApplyStep(); return; }
+    bench_.retried = false;
 
-    // done: the user's settings back, results to a CSV
+    if (++bench_.step < bench_.steps.size()) {
+        const BenchStep& next = bench_.steps[bench_.step];
+        if (next.lowRes && !bench_.onLowRes) {   // switch the card to its 1080p mode once
+            bench_.onLowRes = true;
+            bench_.text = L("Benchmark: switching the card to %1…", "Benchmark: skifter kortet til %1…").arg(QString::fromStdString(bench_.lowMode.label));
+            emit benchChanged();
+            const EnhanceSettings keep = s_;
+            startCapture(bench_.device, bench_.lowMode, bench_.audio);
+            s_ = keep;
+            bench_.phase = 3;
+            bench_.t0 = nowMs();
+            return;
+        }
+        benchApplyStep();
+        return;
+    }
+    finishBenchmark();
+}
+
+void PlayerBridge::finishBenchmark() {
     stopBenchmark();
     const QString path = reportDir() + "/veyamux-benchmark-" + QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss") + ".csv";
     QFile f(path);
     if (f.open(QIODevice::WriteOnly)) {
         QTextStream o(&f);
         o << "# " << buildInfo() << " · " << bench_.source << " · "
-          << (liveVk_->context() ? vulkanDriver(liveVk_->context()) : QString()) << "\n";
-        o << "step,fps,frame_ms,jitter_ms,p99_ms,delay_ms,gpu_ms,gpu_input,gpu_denoise,gpu_aa,gpu_upscale,gpu_finish,gpu_output,cpu_pct,rss_mb\n";
+          << (liveVk_ && liveVk_->context() ? vulkanDriver(liveVk_->context()) : QString()) << "\n";
+        for (const QString& n : bench_.notes) o << "# " << n << "\n";
+        o << "section,step,source,fps,frame_ms,jitter_ms,p99_ms,delay_ms,gpu_ms,gpu_input,gpu_denoise,gpu_aa,gpu_upscale,gpu_finish,gpu_output,"
+             "gpu_frames,cpu_pct,rss_mb,threads,flag\n";
         for (const auto& b : bench_.rows) {
-            o << '"' << b.name << '"';
+            o << '"' << b.section << "\",\"" << b.name << "\",\"" << b.source << '"';
             for (double v : {b.fps, b.frameMs, b.jitter, b.p99, b.delay, b.gpu}) o << ',' << QString::number(v, 'f', 3);
             for (double v : b.stages) o << ',' << (v < 0 ? QString() : QString::number(v, 'f', 3));
-            o << ',' << QString::number(b.cpu, 'f', 1) << ',' << QString::number(b.rssMb, 'f', 0) << '\n';
+            o << ',' << b.gpuFrames << ',' << QString::number(b.cpu, 'f', 1) << ',' << QString::number(b.rssMb, 'f', 0)
+              << ",\"" << b.threads << "\"," << b.flag << '\n';
         }
         bench_.csv = path;
     }
@@ -427,6 +590,10 @@ void PlayerBridge::stopBenchmark() {
     if (bench_.timer) { bench_.timer->stop(); bench_.timer->deleteLater(); bench_.timer = nullptr; }
     if (bench_.running) {
         bench_.running = false;
+        if (bench_.onLowRes && bench_.savedMode.fourcc) {   // the card back to the mode it had
+            bench_.onLowRes = false;
+            startCapture(bench_.device, bench_.savedMode, bench_.audio);
+        }
         s_ = bench_.saved;
         applyEnhance();
         if (bench_.step < bench_.steps.size())
@@ -437,15 +604,37 @@ void PlayerBridge::stopBenchmark() {
 
 QString PlayerBridge::benchTable() const {
     QStringList r;
-    r << QStringLiteral("Source: %1%2").arg(bench_.source, bench_.csv.isEmpty() ? "" : " · CSV: `" + bench_.csv + "`") << ""
-      << "| Step | fps | jitter ms | 99 % ms | delay ms | GPU ms | input | denoise/AF | AA | upscale | finish | output | CPU % |"
-      << "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|";
+    r << QStringLiteral("Source: %1%2").arg(bench_.source, bench_.csv.isEmpty() ? "" : " · CSV: `" + bench_.csv + "`");
+    for (const QString& n : bench_.notes) r << "- " + n;
+    // the cost of each step against the plain picture of the same source
+    double base = -1, baseLow = -1;
     for (const auto& b : bench_.rows) {
-        QString line = QStringLiteral("| %1 | %2 | %3 | %4 | %5 | %6").arg(b.name).arg(b.fps, 0, 'f', 1).arg(b.jitter, 0, 'f', 2)
-                           .arg(b.p99, 0, 'f', 1).arg(b.delay, 0, 'f', 1).arg(b.gpu, 0, 'f', 2);
+        if (b.name == "Enhance on, nothing else") base = b.gpu;
+        if (b.name == "1080p: enhance on, nothing else") baseLow = b.gpu;
+    }
+    QString section;
+    for (const auto& b : bench_.rows) {
+        if (b.section != section) {
+            section = b.section;
+            r << "" << "**" + section + "**" << ""
+              << "| Step | Source | fps | jitter ms | 99 % ms | delay ms | GPU ms | + vs plain | input | denoise/AF | AA | upscale | finish | output | CPU % | busiest threads (% of a core) | |"
+              << "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|";
+        }
+        const double ref = b.name.startsWith("1080p") ? baseLow : base;
+        QString line = QStringLiteral("| %1 | %2 | %3 | %4 | %5 | %6 | %7 | %8").arg(b.name, b.source).arg(b.fps, 0, 'f', 1).arg(b.jitter, 0, 'f', 2)
+                           .arg(b.p99, 0, 'f', 1).arg(b.delay, 0, 'f', 1).arg(b.gpu, 0, 'f', 2)
+                           .arg(ref >= 0 && b.gpu >= 0 ? QStringLiteral("%1%2").arg(b.gpu - ref >= 0 ? "+" : "").arg(b.gpu - ref, 0, 'f', 2) : QStringLiteral("–"));
         for (double v : b.stages) line += v < 0 ? QStringLiteral(" | –") : QStringLiteral(" | %1").arg(v, 0, 'f', 2);
-        line += QStringLiteral(" | %1 |").arg(b.cpu, 0, 'f', 0);
+        line += QStringLiteral(" | %1 | %2 | %3 |").arg(b.cpu, 0, 'f', 0).arg(b.threads, b.flag == "uneven" ? "⚠ uneven" : b.flag);
         r << line;
     }
+    // how much of a frame the heaviest step uses
+    double worst = 0, frame = 0;
+    QString worstName;
+    for (const auto& b : bench_.rows) if (b.gpu > worst && !b.name.startsWith("Enhance off")) { worst = b.gpu; worstName = b.name; frame = b.frameMs; }
+    if (worst > 0)
+        r << "" << QStringLiteral("Heaviest step: %1, %2 ms GPU (%3 % of a %4 fps frame, %5 % of a 60 fps frame).")
+                       .arg(worstName).arg(worst, 0, 'f', 1).arg(frame > 0 ? worst / frame * 100 : 0, 0, 'f', 0)
+                       .arg(frame > 0 ? 1000.0 / frame : 0, 0, 'f', 0).arg(worst / 16.667 * 100, 0, 'f', 0);
     return r.join('\n');
 }

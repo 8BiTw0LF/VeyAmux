@@ -1,4 +1,5 @@
 #include "LiveVulkan.h"
+#include <pthread.h>
 #include <QCoreApplication>
 #include <QEvent>
 #include <cstring>
@@ -25,7 +26,7 @@ LiveVulkan::~LiveVulkan() {
 
 bool LiveVulkan::init(std::string& error) {
     if (!chain_->init(error)) return false;
-    streamThread_ = std::thread([this] { streamLoop(); });
+    streamThread_ = std::thread([this] { pthread_setname_np(pthread_self(), "vx-obs"); streamLoop(); });
     return true;
 }
 

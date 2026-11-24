@@ -101,6 +101,7 @@ void EnhanceChain::outputSize(int w, int h, const EnhanceSettings& s, int& ow, i
 }
 
 void EnhanceChain::releaseResources() {
+    mvPrev_ = false;
     for (ImageRes* i : {&src_, &lin_, &linB_, &luma_, &up_, &fin_, &rawPacked_, &rawY_, &rawUV_, &rawY16_, &rawUV16_, &src16_, &nrOut_, &nrHist_[0], &nrHist_[1], &dfOut_, &dfPrev_[0], &dfPrev_[1], &dfAl_[0], &dfAl_[1], &dfPrev2_[0], &dfPrev2_[1], &pre8_, &cmp_, &smaaEdges_, &smaaWeights_, &detLow_[0], &detLow_[1], &detOut_}) ctx_.destroy(*i);
     nrHistory_ = false;
     dfHistory_ = false;
@@ -255,8 +256,15 @@ void EnhanceChain::recordPost(const ImageRes* start, const EnhanceSettings& s) {
     const ImageRes* cur = start;
     const bool temporalNr = s.enabled && (s.denoise == Denoise::Temporal || s.denoise == Denoise::Both);
     const bool deflicker = s.enabled && s.deflicker;
-    // one motion estimate per frame for anti-flicker and the temporal denoiser (both look at the source)
-    const ImageRes* mv = (temporalNr || deflicker) ? recordMotion(start) : nullptr;
+    // One motion estimate per frame for anti-flicker, the temporal denoiser and FSR 3.1 upscaling: all three need the
+    // motion between this source frame and the last, and estimating it costs about 3 ms at 4K on an RX 9070 XT
+    // (benchmark). Before, FSR 3.1 estimated it again on its own input.
+    const bool fsr3 = s.enabled && s.upscaler == Upscaler::AmdFsr3 && !s.retroTv && !s.pixelActive() &&
+                      (ow != w || oh != h || s.fsrNativeAa());
+    static const bool ownFsrMotion = std::getenv("VEYAMUX_FSR_OWN_MOTION") != nullptr;   // the old way, to compare
+    const bool needMv = temporalNr || deflicker || (fsr3 && !ownFsrMotion);
+    const ImageRes* mv = needMv ? recordMotion(start) : nullptr;
+    if (!needMv) mvPrev_ = false;
     if (deflicker) cur = recordDeflicker(cur, mv);
     else dfHistory_ = false;
     if (s.enabled && s.denoise != Denoise::Off) { cur = recordDenoise(cur, s, mv); timer_.mark(ctx_.active(), GpuTimer::Denoise); }
@@ -311,7 +319,7 @@ void EnhanceChain::recordPost(const ImageRes* start, const EnhanceSettings& s) {
         const uint64_t key = (uint64_t(w) << 48) ^ (uint64_t(h) << 32) ^ (uint64_t(ow) << 16) ^ uint64_t(oh);
         if (s.upscaler == Upscaler::AmdFsr3 && key != upFailedKey_) {
             std::string e;
-            done = fsrUp_->record(ctx_.active(), *cur, up_, !upHistory_, frameMs_, e);
+            done = fsrUp_->record(ctx_.active(), *cur, up_, !upHistory_, frameMs_, e, ownFsrMotion ? nullptr : mv);
             upHistory_ = done;
             if (!done) { upError_ = e; upFailedKey_ = key; }
             else upError_.clear();
@@ -430,7 +438,10 @@ const ImageRes* EnhanceChain::recordMotion(const ImageRes* in) {
     std::string e;
     static const bool zeroMv = std::getenv("VEYAMUX_NR_ZEROMV") != nullptr;   // test hook: no motion
     // a reset when neither temporal pass has history (a new sequence)
-    return nrMotion_->record(ctx_.active(), *in, (!nrHistory_ && !dfHistory_) || zeroMv, e);
+    // a reset when the estimator did not see the previous frame (a new sequence, or no motion was needed last frame)
+    const bool reset = !mvPrev_ || zeroMv;
+    mvPrev_ = true;
+    return nrMotion_->record(ctx_.active(), *in, reset, e);
 }
 
 // Anti-flicker (LxDeflicker): keeps the previous source frame and the one before it (aligned to the previous frame).

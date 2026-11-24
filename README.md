@@ -401,9 +401,11 @@ hardware. It runs next to VeyAmux and does not touch it:
     capture card mode, sound and Lossless Scaling. It also has frame timing (capture → pacer → renderer → drawing),
     the settings, the log and earlier crashes. The stream key and the PlayStation keys are hidden. *Report on GitHub*
     opens a new issue to drag the file into.
-  - **Benchmark:** runs the live picture through up to 19 settings for about 2½ minutes. For each one it measures the
-    GPU time of every stage, frame rate, jitter, delay, CPU and memory. The result is saved as a CSV file and goes
-    into the report.
+  - **Benchmark:** runs the live picture through up to 35 settings in about 4 minutes. It covers picture, noise
+    reduction, motion, upscaling, frame generation and frame pacing. For each one it measures the GPU time of every
+    stage, frame rate, jitter, delay, CPU per thread and memory. It prepares every pass first and measures a step
+    again if it looks wrong. On a 4K card, the upscaling runs on the card's 1080p mode. The result is saved as a CSV
+    file and goes into the report.
   - **Test switches:** turn parts of VeyAmux on or off (the old drawing path, copied capture, the older repeat
     detection, the gamescope keep-alive and others) to find out what causes a problem.
 - **A log file** (`~/.local/share/VeyAmux/VeyAmux-Debug/debug/`, the last ten runs, FFmpeg's warnings included) and

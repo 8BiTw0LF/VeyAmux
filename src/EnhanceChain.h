@@ -119,7 +119,7 @@ public:
     FsrUpscaler* upscaler() { return fsrUp_.get(); }   // test hook
     uint64_t liveGeneration() const { return liveGen_; }
     // a jump in the timeline (seek, new source): no temporal pass may blend across it, frame generation included
-    void resetHistory() { upHistory_ = false; nrHistory_ = false; dfHistory_ = false; fgReset_ = true; hudReset_ = true; }
+    void resetHistory() { upHistory_ = false; nrHistory_ = false; dfHistory_ = false; mvPrev_ = false; fgReset_ = true; hudReset_ = true; }
     static void outputSize(int w, int h, const EnhanceSettings& s, int& ow, int& oh);
 
     // OBS stream (live path): when maxHeight >= 0, every displayed image is downscaled to fit
@@ -236,6 +236,7 @@ private:
     ImageRes dfOut_, dfPrev_[2], dfAl_[2], dfPrev2_[2];
     int dfCur_ = 0;
     bool dfHistory_ = false;
+    bool mvPrev_ = false;   // the shared motion estimator saw the previous frame (else its next field starts over)
     const ImageRes* recordDeflicker(const ImageRes* in, const ImageRes* mv);
     bool upHistory_ = false;          // FSR upscaling has seen the previous frame of this sequence
     std::string upError_;

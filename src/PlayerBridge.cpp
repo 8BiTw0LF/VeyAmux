@@ -764,6 +764,7 @@ void PlayerBridge::loadSettings() {
 }
 
 void PlayerBridge::saveSettings() {
+    if (bench_.running) s_ = bench_.saved;   // never keep a benchmark step's settings
     QSettings q;
     q.setValue("enh/enabled", s_.enabled); q.setValue("enh/scale", double(s_.scale)); q.setValue("enh/upscaler", int(s_.upscaler));
     q.setValue("enh/retroTv", s_.retroTv); q.setValue("enh/retroLines", s_.retroLines);

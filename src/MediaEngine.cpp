@@ -1,4 +1,5 @@
 #include "MediaEngine.h"
+#include <pthread.h>
 #include "FramePacingRepair.h"
 #include "DemoSource.h"
 #include "RemotePlay.h"
@@ -27,6 +28,10 @@ extern "C" {
 #include <utility>
 
 namespace veyamux {
+namespace {
+// thread names show up in the benchmark's CPU list, top and perf (15 characters at most)
+void threadName(const char* n) { pthread_setname_np(pthread_self(), n); }
+}
 namespace {
 using steady = std::chrono::steady_clock;
 double secs(steady::duration d) { return std::chrono::duration<double>(d).count(); }
@@ -184,12 +189,12 @@ bool MediaEngine::open(const std::string& path, std::string& error, bool rawToGp
     vpkts_.abort = apkts_.abort = false;
     clock_.setRunning(false);
     clock_.set(0.0);
-    demux_ = std::thread([this] { demuxLoop(); });
+    demux_ = std::thread([this] { threadName("vx-demux"); demuxLoop(); });
     if (vIndex_ >= 0) {
-        vdec_ = std::thread([this] { videoLoop(); });
-        render_ = std::thread([this] { renderLoop(); });
+        vdec_ = std::thread([this] { threadName("vx-vdecode"); videoLoop(); });
+        render_ = std::thread([this] { threadName("vx-render"); renderLoop(); });
     }
-    if (aIndex_ >= 0) adec_ = std::thread([this] { audioLoop(); });
+    if (aIndex_ >= 0) adec_ = std::thread([this] { threadName("vx-adecode"); audioLoop(); });
     return true;
 }
 
@@ -279,10 +284,10 @@ bool MediaEngine::openCapture(const std::string& devicePath, const CaptureMode& 
     live_ = true;
     rawLive_ = rawToGpu;
     playing_ = true;
-    capThread_ = std::thread([this] { captureLoop(); });
-    if (rawToGpu) pacer_ = std::thread([this] { pacerLoop(); });
-    if (!rawToGpu) render_ = std::thread([this] { renderLoop(); });
-    if (!audioSource.empty()) capAudioThread_ = std::thread([this] { captureAudioLoop(); });
+    capThread_ = std::thread([this] { threadName("vx-capture"); captureLoop(); });
+    if (rawToGpu) pacer_ = std::thread([this] { threadName("vx-pacer"); pacerLoop(); });
+    if (!rawToGpu) render_ = std::thread([this] { threadName("vx-render"); renderLoop(); });
+    if (!audioSource.empty()) capAudioThread_ = std::thread([this] { threadName("vx-capaudio"); captureAudioLoop(); });
     return true;
 }
 
@@ -922,7 +927,7 @@ void MediaEngine::audioLoop() {
 
 void MediaEngine::startGpu() {
     if (gpuStarted_.exchange(true)) return;
-    gpuThread_ = std::thread([this] { ensureGpu(); });
+    gpuThread_ = std::thread([this] { threadName("vx-gpuinit"); ensureGpu(); });
 }
 
 void MediaEngine::ensureGpu() {

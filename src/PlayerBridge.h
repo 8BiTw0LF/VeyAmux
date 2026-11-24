@@ -1,5 +1,6 @@
 // QML-facing wrapper around veyamux::MediaEngine.
 #pragma once
+#include <map>
 #include <array>
 #include "AppUpdate.h"
 #include <algorithm>
@@ -643,27 +644,45 @@ private:
     };
     bool gamescope_ = false, pointerHidden_ = false;
     // the benchmark: one step = settings for a few seconds, measured (PlayerBridgeDebug.cpp)
-    struct BenchStep { QString name; std::function<void(veyamux::EnhanceSettings&)> set; };
-    struct BenchRow { QString name; double fps = 0, frameMs = 0, jitter = 0, p99 = 0, delay = 0, gpu = 0, cpu = 0, rssMb = 0;
-                      std::array<double, 6> stages{}; int samples = 0; };
+    struct BenchStep {
+        QString section, name;
+        std::function<void(veyamux::EnhanceSettings&)> set;
+        bool lowRes = false;        // runs on the card's 1080p mode (upscaling a 4K card's picture would make 8K)
+        bool moreFrames = false;    // frame generation: the frame rate is meant to rise
+    };
+    struct BenchRow {
+        QString section, name, source, threads, flag;
+        double fps = 0, frameMs = 0, jitter = 0, p99 = 0, delay = 0, gpu = 0, cpu = 0, rssMb = 0;
+        std::array<double, 6> stages{};
+        int samples = 0, gpuFrames = 0;
+    };
     struct Bench {
         bool running = false;
         std::vector<BenchStep> steps;
         size_t step = 0;
         veyamux::EnhanceSettings saved;
         QString text, source;
+        QStringList notes;              // what was left out and why
         std::vector<BenchRow> rows;
         BenchRow cur;
-        double t0 = 0;                      // ms (steady clock) when measuring this step began
+        double t0 = 0;                  // ms (steady clock) when the current phase began
         long long cpuTicks0 = 0;
+        std::map<int, std::pair<QString, long long>> threads0;   // tid -> (name, ticks) when measuring began
         QTimer* timer = nullptr;
-        int phase = 0;                      // 0 settle, 1 measure
-        QString csv;                        // the last result file
+        int phase = 0;                  // 0 prepare (every step briefly, so shaders are built), 1 settle, 2 measure, 3 source restart
+        size_t prep = 0;                // the step being prepared
+        bool retried = false;           // this step was measured again because it looked wrong
+        bool onLowRes = false;          // the card runs its 1080p mode now
+        double refFps = 0, refJitter = 0;
+        veyamux::CaptureMode savedMode, lowMode;
+        QString device, audio;
+        QString csv;
     } bench_;
     QString lastReport_;
     bool debugRestart_ = false;
     void benchTick();
     void benchApplyStep();
+    void finishBenchmark();
     QString benchTable() const;
     QString paceSummary();
     QElapsedTimer nudgeUntil_;
