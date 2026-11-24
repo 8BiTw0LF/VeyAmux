@@ -344,7 +344,8 @@ void PlayerBridge::startBenchmark() {
     if (srcH > 1440 && card) {
         double best = 1e9;
         for (const auto& m : veyamux::listCaptureModes(curDevice_.toStdString())) {
-            if (m.h != 1080 || m.fourcc == 0 || m.fourcc == V4L2_PIX_FMT_MJPEG || m.fourcc == V4L2_PIX_FMT_P010) continue;
+            // exactly 1920×1080 (not an ultrawide 2560×1080), uncompressed SDR
+            if (m.w != 1920 || m.h != 1080 || m.fourcc == 0 || m.fourcc == V4L2_PIX_FMT_MJPEG || m.fourcc == V4L2_PIX_FMT_P010) continue;
             const double d = std::abs(m.fps - curMode_.fps) + (m.fourcc == V4L2_PIX_FMT_NV12 ? 0 : 0.1);
             if (d < best) { best = d; bench_.lowMode = m; lowRes = true; }
         }
@@ -456,7 +457,12 @@ void PlayerBridge::benchTick() {
 
     if (bench_.phase == 3) {   // the card changes mode: wait until the new mode delivers pictures
         if (t - bench_.t0 < kRestart || !hasMedia() || !liveVulkanActive()) {
-            if (t - bench_.t0 > 30000) { bench_.notes << "The card did not come back in its 1080p mode."; stopBenchmark(); }
+            if (t - bench_.t0 > 20000) {
+                bench_.notes << L("The upscaling steps were not measured: the card did not deliver pictures in %1.",
+                                  "Opskaleringstrinnene blev ikke målt: kortet leverede ikke billeder i %1.")
+                                    .arg(QString::fromStdString(bench_.lowMode.label));
+                finishBenchmark();
+            }
             return;
         }
         bench_.phase = 0;                // prepare the 1080p steps' passes too
@@ -464,7 +470,11 @@ void PlayerBridge::benchTick() {
         bench_.t0 = t;
         return;
     }
-    if (!hasMedia() || !liveVulkanActive()) { stopBenchmark(); return; }
+    if (!hasMedia() || !liveVulkanActive()) {
+        bench_.notes << L("Stopped: the picture went away.", "Stoppet: billedet forsvandt.");
+        finishBenchmark();
+        return;
+    }
 
     if (bench_.phase == 0) {   // prepare: every step of the native source briefly
         if (t - bench_.t0 < kPrep && bench_.prep > bench_.step) return;
@@ -548,8 +558,15 @@ void PlayerBridge::benchTick() {
             bench_.text = L("Benchmark: switching the card to %1…", "Benchmark: skifter kortet til %1…").arg(QString::fromStdString(bench_.lowMode.label));
             emit benchChanged();
             const EnhanceSettings keep = s_;
-            startCapture(bench_.device, bench_.lowMode, bench_.audio);
+            const bool started = startCapture(bench_.device, bench_.lowMode, bench_.audio);
             s_ = keep;
+            if (!started) {
+                bench_.notes << L("The upscaling steps were not measured: the card would not start %1.",
+                                  "Opskaleringstrinnene blev ikke målt: kortet ville ikke starte %1.")
+                                    .arg(QString::fromStdString(bench_.lowMode.label));
+                finishBenchmark();
+                return;
+            }
             bench_.phase = 3;
             bench_.t0 = nowMs();
             return;
@@ -560,8 +577,11 @@ void PlayerBridge::benchTick() {
     finishBenchmark();
 }
 
+// Writes what was measured (also when it stopped early) and puts the settings and the card's mode back.
 void PlayerBridge::finishBenchmark() {
-    stopBenchmark();
+    const bool complete = bench_.step >= bench_.steps.size();
+    stopBenchmark(false);
+    if (bench_.rows.empty()) { emit benchChanged(); return; }
     const QString path = reportDir() + "/veyamux-benchmark-" + QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss") + ".csv";
     QFile f(path);
     if (f.open(QIODevice::WriteOnly)) {
@@ -580,14 +600,25 @@ void PlayerBridge::finishBenchmark() {
         }
         bench_.csv = path;
     }
-    bench_.text = L("Benchmark done (%1 steps). Saved: %2. It is also in the next report.",
-                    "Benchmark færdig (%1 trin). Gemt: %2. Den kommer også med i næste rapport.")
-                      .arg(bench_.rows.size()).arg(QFileInfo(path).fileName());
+    bench_.text = complete ? L("Benchmark done (%1 steps). Saved: %2. It is also in the next report.",
+                               "Benchmark færdig (%1 trin). Gemt: %2. Den kommer også med i næste rapport.")
+                                 .arg(bench_.rows.size()).arg(QFileInfo(path).fileName())
+                           : L("Benchmark stopped after %1 of %2 steps; what was measured is saved: %3. %4",
+                               "Benchmark stoppet efter %1 af %2 trin; det målte er gemt: %3. %4")
+                                 .arg(bench_.rows.size()).arg(bench_.steps.size()).arg(QFileInfo(path).fileName())
+                                 .arg(bench_.notes.isEmpty() ? QString() : bench_.notes.last());
     emit benchChanged();
 }
 
-void PlayerBridge::stopBenchmark() {
+void PlayerBridge::stopBenchmark() { stopBenchmark(true); }
+
+void PlayerBridge::stopBenchmark(bool save) {
     if (bench_.timer) { bench_.timer->stop(); bench_.timer->deleteLater(); bench_.timer = nullptr; }
+    if (save && bench_.running) {   // the stop button: keep what was measured
+        bench_.notes << L("Stopped by hand.", "Stoppet i hånden.");
+        finishBenchmark();
+        return;
+    }
     if (bench_.running) {
         bench_.running = false;
         if (bench_.onLowRes && bench_.savedMode.fourcc) {   // the card back to the mode it had
@@ -596,8 +627,6 @@ void PlayerBridge::stopBenchmark() {
         }
         s_ = bench_.saved;
         applyEnhance();
-        if (bench_.step < bench_.steps.size())
-            bench_.text = L("Benchmark stopped after %1 steps.", "Benchmark stoppet efter %1 trin.").arg(bench_.rows.size());
     }
     emit benchChanged();
 }

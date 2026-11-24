@@ -683,6 +683,7 @@ private:
     void benchTick();
     void benchApplyStep();
     void finishBenchmark();
+    void stopBenchmark(bool save);
     QString benchTable() const;
     QString paceSummary();
     QElapsedTimer nudgeUntil_;
