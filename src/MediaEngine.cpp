@@ -215,7 +215,7 @@ void MediaEngine::joinAll() {
 void MediaEngine::close() {
     if (!fmt_ && !live_) return;
     joinAll();
-    cap_.reset();
+    { std::lock_guard l(capM_); cap_.reset(); }
     live_ = false;
     rawLive_ = false;
     clearQueue(vpkts_);
@@ -262,8 +262,9 @@ bool MediaEngine::openCapture(const std::string& devicePath, const CaptureMode& 
                               std::string& error, bool rawToGpu) {
     close();
     auto cap = std::make_unique<CaptureSource>();
+    cap->setMjpegDecode(mjpegDecode_.load());
     if (!cap->open(devicePath, mode, error)) return false;
-    cap_ = std::move(cap);
+    { std::lock_guard l(capM_); cap_ = std::move(cap); }
     info_ = {};
     info_.title = "Capture: " + (cap_->cardName().empty() ? devicePath : cap_->cardName());
     info_.hasVideo = true;
@@ -289,6 +290,22 @@ bool MediaEngine::openCapture(const std::string& devicePath, const CaptureMode& 
     if (!rawToGpu) render_ = std::thread([this] { threadName("vx-render"); renderLoop(); });
     if (!audioSource.empty()) capAudioThread_ = std::thread([this] { threadName("vx-capaudio"); captureAudioLoop(); });
     return true;
+}
+
+MediaEngine::CaptureStats MediaEngine::captureStats() const {
+    std::lock_guard l(capM_);
+    CaptureStats st;
+    if (!cap_ || !live_.load()) return st;
+    st.delivered = cap_->deliveredFrames();
+    st.corrupt = cap_->corruptFrames();
+    st.decodePath = cap_->mjpegDecodePath();
+    st.decodeMs = cap_->mjpegDecodeMs();
+    return st;
+}
+
+std::vector<double> MediaEngine::takeCaptureArrivals() {
+    std::lock_guard l(capM_);
+    return cap_ && live_.load() ? cap_->takeArrivals() : std::vector<double>{};
 }
 
 void MediaEngine::captureLoop() {

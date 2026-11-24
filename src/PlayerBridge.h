@@ -42,6 +42,11 @@ class PlayerBridge : public QObject {
     Q_PROPERTY(double benchProgress READ benchProgress NOTIFY benchChanged)
     Q_PROPERTY(QString lastReport READ lastReport NOTIFY benchChanged)
     Q_PROPERTY(bool debugRestartNeeded READ debugRestartNeeded NOTIFY benchChanged)
+    // "Find the best signal" in the capture dialog (PlayerBridgeSignalTest.cpp)
+    Q_PROPERTY(bool signalTestRunning READ signalTestRunning NOTIFY signalTestChanged)
+    Q_PROPERTY(QString signalTestText READ signalTestText NOTIFY signalTestChanged)
+    Q_PROPERTY(double signalTestProgress READ signalTestProgress NOTIFY signalTestChanged)
+    Q_PROPERTY(QVariantList signalTestResults READ signalTestResults NOTIFY signalTestChanged)
     // the demo scene (DemoSource.h): available in this build, running as the source, and how far its world is built
     Q_PROPERTY(bool demoAvailable READ demoAvailable CONSTANT)
     Q_PROPERTY(bool demoActive READ demoActive NOTIFY mediaChanged)
@@ -430,6 +435,18 @@ public:
     QString benchText() const { return bench_.text; }
     double benchProgress() const { return bench_.steps.empty() ? 0.0 : double(bench_.step) / double(bench_.steps.size()); }
     QString lastReport() const { return lastReport_; }
+    // --- Find the best signal: plays each sensible mode of the card for a few seconds on this PC and measures what
+    // arrives (frame rate, evenness, broken pictures), the delay, CPU and GPU, MJPEG on the graphics card and on the
+    // CPU. The card's own list cannot say which mode this machine (AMD, Intel or NVIDIA, USB controller, CPU) handles best.
+    Q_INVOKABLE bool startSignalTest(const QString& path, const QString& audioSource);
+    Q_INVOKABLE void stopSignalTest();
+    Q_INVOKABLE bool useSignalResult(int row);            // starts that mode (and its MJPEG decoding)
+    Q_INVOKABLE bool toggleFavoriteSignal(int row);
+    bool signalTestRunning() const { return sig_.running; }
+    QString signalTestText() const { return sig_.text; }
+    double signalTestProgress() const { return sig_.cands.empty() ? 0.0 : double(sig_.i) / double(sig_.cands.size()); }
+    QVariantList signalTestResults() const;
+    void sampleSignalTest();   // test hook: made-up results, to show the dialog without a card
     Q_INVOKABLE QVariantList debugSwitches() const;        // [{env, title, detail, on}]
     Q_INVOKABLE void setDebugSwitch(const QString& env, bool on);
     bool debugRestartNeeded() const { return debugRestart_; }       // F6: notes this moment of the recording in "<recording>-markers.txt"
@@ -582,6 +599,7 @@ signals:
     void overlayChanged();
     void overlayTick();
     void benchChanged();
+    void signalTestChanged();
     void recTick();
 
 private:
@@ -680,6 +698,38 @@ private:
         QString csv;
     } bench_;
     QString lastReport_;
+    struct SigCand { veyamux::CaptureMode mode; int decode = 0; };   // decode: 0 not MJPEG, 1 graphics card, 2 CPU
+    struct SigRow {
+        veyamux::CaptureMode mode;
+        int decode = 0;
+        QString decodePath, flag;      // flag: why it was not measured / did not keep up
+        double nominal = 0, fps = 0, content = 0, jitter = 0, delay = 0, cpu = 0, gpu = 0, decodeMs = 0, corruptPct = 0, score = 0;
+        int drops = 0;
+        bool measured = false, keepsUp = false;
+        QStringList tags;              // Recommended, Least delay, Smoothest, Sharpest
+    };
+    struct SigTest {
+        bool running = false;
+        std::vector<SigCand> cands;
+        size_t i = 0;
+        int phase = 0;                 // 0 start the mode, 1 settle, 2 measure
+        double t0 = 0;
+        int tries = 0;
+        QString path, audio, text;
+        bool hadCapture = false;
+        veyamux::CaptureMode savedMode;
+        QString savedDevice, savedAudio;
+        std::vector<SigRow> rows;
+        QTimer* timer = nullptr;
+        long long cpu0 = 0;
+        uint64_t del0 = 0, cor0 = 0;
+        double delaySum = 0;
+        int delayN = 0;
+        int decodeOverride = -1;       // while testing: the MJPEG decoding startCapture uses instead of the setting
+    } sig_;
+    void signalTick();
+    void finishSignalTest(bool restore);
+    static QString captureModeKey(const veyamux::CaptureMode& m);
     bool debugRestart_ = false;
     void benchTick();
     void benchApplyStep();

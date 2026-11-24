@@ -599,5 +599,9 @@ Window {
         }
     }
     }   // hdrRoot
-    Component.onCompleted: { hideTimer.start(); if (startDialog) capDlg.openDialog() }
+    Component.onCompleted: {
+        hideTimer.start()
+        if (startDialog) capDlg.openDialog()
+        if (player.signalTestResults.length > 0) { capDlg.openDialog(); capDlg.testView = true }   // VEYAMUX_TEST_SIGNALTEST
+    }
 }

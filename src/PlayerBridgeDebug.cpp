@@ -321,7 +321,7 @@ std::map<int, std::pair<QString, long long>> threadTicks() {
 } // namespace
 
 void PlayerBridge::startBenchmark() {
-    if (bench_.running) return;
+    if (bench_.running || sig_.running) return;
     if (!hasMedia() || !liveVulkanActive()) {
         bench_.text = L("Start a capture card or the demo first: the benchmark measures the live picture.",
                         "Start et capture-kort eller demoen først: benchmarken måler det levende billede.");

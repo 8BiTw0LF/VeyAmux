@@ -348,6 +348,8 @@ int main(int argc, char** argv) {
     engine.rootContext()->setContextProperty("keepControls", !grabPath.isEmpty());
     player.setVrrAtStart(vrrAtStart);
     player.setRunContext(vulkanUi, lsfgEnabled, lsfgCrashed);
+    // Test hook: the capture dialog's signal test with sample results (VEYAMUX_TEST_SIGNALTEST=1, for screenshots)
+    if (qEnvironmentVariableIsSet("VEYAMUX_TEST_SIGNALTEST")) player.sampleSignalTest();
     engine.load(QUrl("qrc:/qml/Main.qml"));
     if (engine.rootObjects().isEmpty()) return 1;
     auto* win = qobject_cast<QQuickWindow*>(engine.rootObjects().first());

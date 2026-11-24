@@ -518,7 +518,7 @@ Hvor teksterne ligger:
 Samme princip som Windows-versionen: billedet forlader aldrig GPU'en. Rå YUYV/UYVY/NV12-frames uploades, farvekonverteres og
 forbedres i Vulkan *direkte i Qt's egen frame* (samme Vulkan-enhed, ingen readback, ingen CPU-konvertering), og V4L2-køen
 tømmes så kun det nyeste billede bruges ("mailbox"). Vsync er slået fra som standard (`VEYAMUX_VSYNC=1` slår det til).
-MJPEG dekodes stadig på CPU'en.
+MJPEG dekodes til NV12 (se *MJPEG-afkodning* nedenfor) og går samme vej.
 - **Én kopi:** et råt V4L2-billede kopieres ikke ud af driverens buffer i capture-tråden. `RawFrame::ext` peger ind i
   den mmap'ede buffer, og `RawFrame::hold` (shared_ptr med en deleter, der laver `VIDIOC_QBUF`) holder den fra driveren,
   til billedet er erstattet; renderen kopierer den én gang direkte til Vulkans upload-buffer. Der bedes om 6 buffere
@@ -537,6 +537,35 @@ falder tilbage til software. `VEYAMUX_UI=software|vulkan` tvinger valg, `--reset
 ## Capture-kort
 Tryk **C** (eller kamera-ikonet). Vælg enhed, tilstand (★ = anbefalet, ≥50 fps foretrækkes) og lydkilde. Start direkte fra terminal:
 `./VeyAmux-x86_64.AppImage --capture /dev/video0`. Kilden antages at være limited-range (typisk for HDMI-capture).
+
+## MJPEG-afkodning
+`FrameConverter::decodeNv12` (`src/CaptureSource.cpp`) afkoder kortets JPEG'er til NV12, så kun 1,5 byte pr. pixel går
+til GPU'en (33 MB RGBA ved 4K før). Fuld range kommer fra JPEG'ens `color_range`; matrixen følger størrelsen (709 for HD).
+- **Grafikkortet:** FFmpeg-hwaccel (`avcodec_get_hw_config`): først VA-API (AMD/Intel; `VEYAMUX_VAAPI_DEVICE=/dev/dri/renderD128`
+  vælger kortet, når der er flere), så CUDA/NVDEC (NVIDIA). Billedet hentes med `av_hwframe_transfer_data`. Tre fejl i
+  træk → CPU resten af sessionen.
+- **CPU:** libavcodec med 2 tråde; 4:2:2 (yuvj422p) midles ned til 4:2:0.
+- Indstillingen `cap/mjpegDecode`: 0 automatisk (grafikkort når muligt), 1 grafikkort, 2 CPU. Sættes af *Brug* i
+  signaltesten; sendes til `MediaEngine::setMjpegDecode` før `openCapture`.
+- Ødelagte billeder tælles: afkodningsfejl plus `V4L2_BUF_FLAG_ERROR`. F3 og rapporten viser afkodningsvej og ms.
+- `veyamux-mjpeg-test <fil.jpg>…` afkoder JPEG'er til NV12 og skriver værdier ud (test uden kort).
+
+## Find det bedste signal (capture-dialogen)
+`src/PlayerBridgeSignalTest.cpp`. Kandidater (højst 8, 25–120 fps, uden P010): den største ukomprimerede tilstand ved
+højeste fps og ved 30 fps, 1080p ukomprimeret ved samme fps, en mellemstørrelse (helst 16:9) hvis den er hurtigere end
+den største, MJPEG i største størrelse på grafikkortet og på CPU'en (CPU-kørslen springes over, hvis grafikkortet faldt
+tilbage til CPU), og MJPEG 1080p hvis kortet ikke har ukomprimeret 1080p.
+- Hver kandidat: `startCapture` (3 forsøg), vent til billeder kommer (højst 10 s; intet fra den første = intet signal,
+  testen stopper), 2,5 s indsvingning, 4 s måling: leverede billeder/s (`CaptureSource::deliveredFrames`), mellemrum
+  mellem billederne ved DQBUF (`takeArrivals`: jitter, pauser > 1,5 × intervallet), ødelagte, `pipelineMs`, CPU for hele
+  processen, GPU-tid (`gpuSums`), afkodningsvej/-tid og spillets egen fps (ContentProbe).
+- *Følger med*: ≥ 97 % af tilstandens fps, < 2 % ødelagte, højst 2 % pauser. Blandt dem: point = 50 × fps (spillets egen,
+  højst tilstandens) / bedste + 25 × √(pixels/største) (MJPEG × 0,85) + 15 × (1 − ekstra forsinkelse/33 ms) + 10 ×
+  jævnhed (jitter mod et halvt interval); −10 hvis CPU-afkodningen bruger over halvdelen af CPU'en. Mærker: Anbefalet
+  (flest point), Mindst forsinkelse, Mest flydende, Skarpest.
+- Bagefter startes det, der kørte før; kørte intet, bliver den anbefalede stående. Brugerens billedindstillinger
+  gælder under testen (så GPU-tiden er den rigtige). Resultaterne logges (`Signal test: …`) og kommer med i fejlrapporten.
+- `VEYAMUX_TEST_SIGNALTEST=1` viser dialogen med opdigtede eksempelresultater (skærmbilleder uden kort).
 
 ## Vindue eller skærm som kilde (skærmdeling)
 *Vindue eller skærm …* nederst i enhedslisten (`--capture screencast`) bruger skrivebordets skærmdelings-portal

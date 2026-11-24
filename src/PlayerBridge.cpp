@@ -476,6 +476,12 @@ void PlayerBridge::updateOverlay() {
         if (liveVulkanActive() && liveVk_->pipelineMs() > 0) s += L(" · delay %1 ms", " · forsinkelse %1 ms").arg(liveVk_->pipelineMs(), 0, 'f', 1);
         const auto st = engine_.stats();
         if (st.dropped) s += L(" · %1 dropped", " · %1 tabt").arg(st.dropped);
+        if (const auto cs = engine_.captureStats(); !cs.decodePath.empty()) {
+            // MJPEG: where it is decoded and what one picture costs (the card's own compressing is not measurable)
+            s += L("\nMJPEG decoded on: %1 · %2 ms per picture", "\nMJPEG afkodet på: %1 · %2 ms pr. billede")
+                     .arg(QString::fromStdString(cs.decodePath)).arg(cs.decodeMs, 0, 'f', 1);
+            if (cs.corrupt) s += L(" · %1 broken", " · %1 i stykker").arg(cs.corrupt);
+        }
         if (engine_.isLive() && s_.pacingRepair && s_.frameGen != veyamux::FrameGenMode::Off) {
             if (!pacingClock_.isValid() || pacingClock_.elapsed() >= 1000) {
                 pacingShown_ = engine_.pacingRepairShare();
@@ -1255,6 +1261,8 @@ QString modeKey(const veyamux::CaptureMode& m) {
 constexpr int kMaxFavorites = 3;
 }
 
+QString PlayerBridge::captureModeKey(const veyamux::CaptureMode& m) { return modeKey(m); }
+
 QVariantList PlayerBridge::captureModes(const QString& path) {
     lastModes_ = veyamux::listCaptureModes(path.toStdString());
     const QStringList favs = QSettings().value("cap/favorites").toStringList();
@@ -1436,6 +1444,7 @@ bool PlayerBridge::startCapture(const QString& path, const veyamux::CaptureMode&
     { QMutexLocker l(&imgMutex_); image_ = QImage(); }
     if (liveVk_) liveVk_->setActive(false);
     const bool zeroCopy = liveVk_ != nullptr;
+    engine_.setMjpegDecode(sig_.decodeOverride >= 0 ? sig_.decodeOverride : QSettings().value("cap/mjpegDecode", 0).toInt());
     if (!engine_.openCapture(path.toStdString(), mode, audioSource.toStdString(), err, zeroCopy)) {
         qWarning("Capture %s (%s) did not start: %s", qPrintable(path), mode.label.c_str(), err.c_str());
         lastCaptureError_ = QString::fromStdString(err);
