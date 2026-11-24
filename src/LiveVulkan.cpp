@@ -130,15 +130,24 @@ void LiveVulkan::setActive(bool on) {
     if (!on) {
         std::lock_guard l(m_);
         hasNew_ = haveCurrent_ = redraw_ = false;
-        mailbox_.hold.reset(); mailbox_.ext = nullptr;   // capture buffers go back to the card
-        current_.hold.reset(); current_.ext = nullptr;
+        mailbox_.hold.reset(); mailbox_.ext = nullptr;   // a waiting capture buffer goes back to the card
+        // (current_ belongs to the render thread, which gives its buffer back as soon as the picture is uploaded)
     }
     QMetaObject::invokeMethod(win_, "update", Qt::QueuedConnection);
+}
+
+void LiveVulkan::dropPending() {
+    std::lock_guard l(m_);
+    mailbox_.hold.reset(); mailbox_.ext = nullptr; mailbox_.extSize = 0;
+    hasNew_ = false;
 }
 
 void LiveVulkan::submit(RawFrame& frame) {
     {
         std::lock_guard l(m_);
+        // Switched off (a new source is being opened): keep nothing. A capture buffer held here would keep the old
+        // device file open (its mapping holds it), and the card then refuses the new mode as busy.
+        if (!active_.load()) return;
         const auto now = std::chrono::steady_clock::now();
         const double dt = std::chrono::duration<double, std::milli>(now - lastArrival_).count();
         lastArrival_ = now;
@@ -171,12 +180,13 @@ void LiveVulkan::requestFrame() {
 
 void LiveVulkan::onBeforeRendering() {
     if (!active_.load()) return;
-    bool fresh = false;
+    bool fresh = false, isNew = false;
     EnhanceSettings s;
     {
         std::lock_guard l(m_);
         s = settings_;
         if (hasNew_) {
+            isNew = true;
             std::swap(current_, mailbox_);
             mailbox_.hold.reset(); mailbox_.ext = nullptr;   // the picture before is not drawn again: its buffer goes back
             hasNew_ = false;
@@ -204,7 +214,7 @@ void LiveVulkan::onBeforeRendering() {
     const auto t0 = std::chrono::steady_clock::now();
     // Where a picture's time goes (ms): capture -> pacer due -> handed to the renderer -> drawing starts, and the gap to
     // the previous drawing. Kept for the diagnostic report; VEYAMUX_DEBUG_PACE=1 also logs every picture.
-    if (fresh && current_.captured.time_since_epoch().count()) {
+    if (isNew && current_.captured.time_since_epoch().count()) {   // (a redraw is not a new picture)
         static const bool paceLog = qEnvironmentVariableIsSet("VEYAMUX_DEBUG_PACE");
         auto ms = [](auto a, auto b) { return std::chrono::duration<double, std::milli>(b - a).count(); };
         const bool paced = current_.due.time_since_epoch().count() != 0;
@@ -232,6 +242,7 @@ void LiveVulkan::onBeforeRendering() {
     }
     in.data = current_.bytes();
     in.size = current_.size();
+    in.reuse = !current_.ext && current_.data.empty();   // a redraw after the capture buffer went back
     in.w = current_.w; in.h = current_.h; in.stride = current_.stride;
     in.fullRange = current_.fullRange;
     in.time = current_.captured.time_since_epoch().count() ? current_.captured : std::chrono::steady_clock::now();
@@ -245,6 +256,10 @@ void LiveVulkan::onBeforeRendering() {
     s.fitW = fitW_.load(); s.fitH = fitH_.load();   // the window's pixel size for the picture (VideoItem)
     bool ok = cb && *cb && chain_->recordLive(*cb, win_->graphicsStateInfo().currentFrameSlot, in, s, err, float(frameMs));
     win_->endExternalCommands();
+    // The picture is in the GPU's upload buffer now: a capture buffer goes back to the card at once. Held longer, its
+    // mapping would keep the device file open, and the card could not be reopened (signal change) or switched.
+    if (current_.ext) { current_.hold.reset(); current_.ext = nullptr; current_.extSize = 0; }
+    if (!ok && in.reuse && err.empty()) return;   // a redraw that has to wait for the next picture
     if (!ok) {
         std::lock_guard l(m_);
         error_ = err.empty() ? "Live path unavailable" : err;
@@ -287,7 +302,7 @@ void LiveVulkan::onBeforeRendering() {
                                      chain_->liveOutput().width, chain_->liveOutput().height,
                                      chain_->upError().empty() ? "" : ", upscaling error: ", chain_->upError().c_str());
     }
-    publish(realHandle, int(real.width), int(real.height), recreated);
+    publish(realHandle, int(real.width), int(real.height), recreated, isNew);
     if (chain_->fgShowRealPending()) {
         // show the real frame half a capture interval after the generated one
         const int halfUs = int(std::clamp(frameMs * 500.0, 3000.0, 30000.0));
@@ -311,8 +326,8 @@ std::vector<double> LiveVulkan::shownTimes() const {
     return {shownTimes_.begin(), shownTimes_.end()};
 }
 
-void LiveVulkan::publish(uint64_t handle, int w, int h, bool recreated) {
-    noteShown();
+void LiveVulkan::publish(uint64_t handle, int w, int h, bool recreated, bool newPicture) {
+    if (newPicture) noteShown();   // a redraw (settings, pause) is not a new picture: the frame times stay true
     imgW_ = w;
     imgH_ = h;
     image_ = handle;

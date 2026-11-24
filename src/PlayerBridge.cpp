@@ -95,6 +95,7 @@ PlayerBridge::PlayerBridge(const QString& shaderDir, QObject* parent)
         }, Qt::QueuedConnection);
     };
     cb.onLiveFrame = [this](veyamux::RawFrame& f) { if (liveVk_) liveVk_->submit(f); };
+    cb.onReleaseLive = [this] { if (liveVk_) liveVk_->dropPending(); };
     cb.onAudio = [this](const int16_t* pcm, int frames, std::chrono::steady_clock::time_point t) {
         meter_.push(pcm, frames);   // the source's sound, before volume and mute (also what recordings/streams get)
         rec_->pushAudio(pcm, frames, t);
@@ -824,8 +825,8 @@ QString PlayerBridge::timingText(float gpu, const std::array<float, veyamux::Gpu
     t += QString(" · CPU %1 ms").arg(cpuMs, 0, 'f', 2);
     if (pipeMs > 0) t += L(" · in VeyAmux %1 ms", " · i VeyAmux %1 ms").arg(pipeMs, 0, 'f', 1);
     if (gpu >= 0) {
-        static const char* en[] = {"input", "noise red.", "FXAA", "upscale", "finish", "OBS"};
-        static const char* da[] = {"ind", "støjred.", "FXAA", "opskal.", "afslut.", "OBS"};
+        static const char* en[] = {"input", "noise red.", "FXAA", "upscale", "finish", "OBS", "frame gen."};
+        static const char* da[] = {"ind", "støjred.", "FXAA", "opskal.", "afslut.", "OBS", "frame gen."};
         QStringList parts;
         for (int i = 0; i < veyamux::GpuTimer::kStages; ++i)
             if (st[size_t(i)] >= 0) parts << QString("%1 %2").arg(L(en[i], da[i])).arg(double(st[size_t(i)]), 0, 'f', 2);
@@ -1436,6 +1437,8 @@ bool PlayerBridge::startCapture(const QString& path, const veyamux::CaptureMode&
     if (liveVk_) liveVk_->setActive(false);
     const bool zeroCopy = liveVk_ != nullptr;
     if (!engine_.openCapture(path.toStdString(), mode, audioSource.toStdString(), err, zeroCopy)) {
+        qWarning("Capture %s (%s) did not start: %s", qPrintable(path), mode.label.c_str(), err.c_str());
+        lastCaptureError_ = QString::fromStdString(err);
         setStatus(translateMessage(QString::fromStdString(err)));
         if (screenCast && portal_) portal_->closeSession();
         emit mediaChanged();

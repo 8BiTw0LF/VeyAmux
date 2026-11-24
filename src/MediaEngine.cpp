@@ -313,6 +313,15 @@ void MediaEngine::captureLoop() {
     // Reopens the device with the same mode: when the card is unplugged, or when it stops delivering after the
     // console changes resolution/refresh rate/HDR (many UVC cards stall until the stream is restarted).
     auto reopen = [&]() -> bool {
+        // Every capture buffer must be given back first: a mapping still held keeps the old device file open, and the
+        // card then refuses the new stream as busy.
+        raw.hold.reset(); raw.ext = nullptr;
+        {
+            std::lock_guard l(pace_m_);
+            for (auto& p : paced_) { p.frame.hold.reset(); p.frame.ext = nullptr; }
+            paced_.clear();
+        }
+        if (cb_.onReleaseLive) cb_.onReleaseLive();
         cap_->close();
         std::string e;
         return cap_->open(capPath_, capMode_, e);

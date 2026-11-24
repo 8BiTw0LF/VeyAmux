@@ -36,7 +36,8 @@ public:
     ~LiveVulkan() override;
 
     bool init(std::string& error);                         // load pipelines (call before the window renders)
-    void submit(veyamux::RawFrame& frame);                   // capture thread; swaps: `frame` gets a used buffer back
+    void submit(veyamux::RawFrame& frame);
+    void dropPending();   // any thread: a picture waiting to be drawn gives its capture buffer back                   // capture thread; swaps: `frame` gets a used buffer back
     void setSettings(const veyamux::EnhanceSettings& s);
     void setActive(bool on);
     bool active() const { return active_.load(); }
@@ -112,5 +113,5 @@ private:
     std::thread streamThread_;
     std::atomic<bool> streamQuit_{false};
     void streamLoop();
-    void publish(uint64_t handle, int w, int h, bool recreated);
+    void publish(uint64_t handle, int w, int h, bool recreated, bool newPicture);
 };

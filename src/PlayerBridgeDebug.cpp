@@ -455,6 +455,19 @@ void PlayerBridge::benchTick() {
     static const bool fast = qEnvironmentVariableIsSet("VEYAMUX_BENCH_FAST");   // tests: much shorter
     const double kPrep = fast ? 150 : 600, kSettle = fast ? 300 : 1500, kMeasure = fast ? 800 : 5000, kRestart = fast ? 1500 : 6000;
 
+    if (bench_.phase == 4) {   // switch the card to its 1080p mode
+        if (t - bench_.t0 < 2000) return;
+        const EnhanceSettings keep = s_;
+        const bool started = startCapture(bench_.device, bench_.lowMode, bench_.audio);
+        s_ = keep;
+        if (started) { bench_.phase = 3; bench_.t0 = nowMs(); return; }
+        if (++bench_.switchTries < 3) { bench_.t0 = nowMs(); return; }
+        bench_.notes << L("The upscaling steps were not measured: the card would not start %1 (%2).",
+                          "Opskaleringstrinnene blev ikke målt: kortet ville ikke starte %1 (%2).")
+                            .arg(QString::fromStdString(bench_.lowMode.label), lastCaptureError_);
+        finishBenchmark();
+        return;
+    }
     if (bench_.phase == 3) {   // the card changes mode: wait until the new mode delivers pictures
         if (t - bench_.t0 < kRestart || !hasMedia() || !liveVulkanActive()) {
             if (t - bench_.t0 > 20000) {
@@ -557,18 +570,9 @@ void PlayerBridge::benchTick() {
             bench_.onLowRes = true;
             bench_.text = L("Benchmark: switching the card to %1…", "Benchmark: skifter kortet til %1…").arg(QString::fromStdString(bench_.lowMode.label));
             emit benchChanged();
-            const EnhanceSettings keep = s_;
-            const bool started = startCapture(bench_.device, bench_.lowMode, bench_.audio);
-            s_ = keep;
-            if (!started) {
-                bench_.notes << L("The upscaling steps were not measured: the card would not start %1.",
-                                  "Opskaleringstrinnene blev ikke målt: kortet ville ikke starte %1.")
-                                    .arg(QString::fromStdString(bench_.lowMode.label));
-                finishBenchmark();
-                return;
-            }
-            bench_.phase = 3;
-            bench_.t0 = nowMs();
+            bench_.phase = 4;   // switch (tried up to three times, two seconds apart)
+            bench_.switchTries = 0;
+            bench_.t0 = nowMs() - 10000;
             return;
         }
         benchApplyStep();
@@ -589,7 +593,7 @@ void PlayerBridge::finishBenchmark() {
         o << "# " << buildInfo() << " · " << bench_.source << " · "
           << (liveVk_ && liveVk_->context() ? vulkanDriver(liveVk_->context()) : QString()) << "\n";
         for (const QString& n : bench_.notes) o << "# " << n << "\n";
-        o << "section,step,source,fps,frame_ms,jitter_ms,p99_ms,delay_ms,gpu_ms,gpu_input,gpu_denoise,gpu_aa,gpu_upscale,gpu_finish,gpu_output,"
+        o << "section,step,source,fps,frame_ms,jitter_ms,p99_ms,delay_ms,gpu_ms,gpu_input,gpu_denoise,gpu_aa,gpu_upscale,gpu_finish,gpu_output,gpu_framegen,"
              "gpu_frames,cpu_pct,rss_mb,threads,flag\n";
         for (const auto& b : bench_.rows) {
             o << '"' << b.section << "\",\"" << b.name << "\",\"" << b.source << '"';
@@ -646,8 +650,8 @@ QString PlayerBridge::benchTable() const {
         if (b.section != section) {
             section = b.section;
             r << "" << "**" + section + "**" << ""
-              << "| Step | Source | fps | jitter ms | 99 % ms | delay ms | GPU ms | + vs plain | input | denoise/AF | AA | upscale | finish | output | CPU % | busiest threads (% of a core) | |"
-              << "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|";
+              << "| Step | Source | fps | jitter ms | 99 % ms | delay ms | GPU ms | + vs plain | input | denoise/AF | AA | upscale | finish | output | frame gen | CPU % | busiest threads (% of a core) | |"
+              << "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|";
         }
         const double ref = b.name.startsWith("1080p") ? baseLow : base;
         QString line = QStringLiteral("| %1 | %2 | %3 | %4 | %5 | %6 | %7 | %8").arg(b.name, b.source).arg(b.fps, 0, 'f', 1).arg(b.jitter, 0, 'f', 2)

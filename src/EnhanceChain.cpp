@@ -102,6 +102,7 @@ void EnhanceChain::outputSize(int w, int h, const EnhanceSettings& s, int& ow, i
 
 void EnhanceChain::releaseResources() {
     mvPrev_ = false;
+    uploadValid_ = false;
     for (ImageRes* i : {&src_, &lin_, &linB_, &luma_, &up_, &fin_, &rawPacked_, &rawY_, &rawUV_, &rawY16_, &rawUV16_, &src16_, &nrOut_, &nrHist_[0], &nrHist_[1], &dfOut_, &dfPrev_[0], &dfPrev_[1], &dfAl_[0], &dfAl_[1], &dfPrev2_[0], &dfPrev2_[1], &pre8_, &cmp_, &smaaEdges_, &smaaWeights_, &detLow_[0], &detLow_[1], &detOut_}) ctx_.destroy(*i);
     nrHistory_ = false;
     dfHistory_ = false;
@@ -530,6 +531,7 @@ bool EnhanceChain::ensureLive(int w, int h, int ow, int oh, std::string& error, 
     if (liveW_ == w && liveH_ == h && rawY_.image && liveStagingSize_ >= need) return true;
     // (a larger upload buffer alone: ensureResources did not wait, so wait here; this is rare)
     vkDeviceWaitIdle(ctx_.device());
+    uploadValid_ = false;
     for (ImageRes* i : {&rawPacked_, &rawY_, &rawUV_}) ctx_.destroy(*i);
     for (auto& b : liveStaging_) ctx_.destroy(b);
     rawPacked_ = ctx_.createImage(uint32_t(w / 2), uint32_t(h), VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
@@ -565,12 +567,16 @@ bool EnhanceChain::recordLive(VkCommandBuffer cb, int slot, const LiveInput& in,
         if (in.fmt == LiveInput::NV12) { rowMin = W; need = st * H * 3 / 2; }
         if (in.fmt == LiveInput::P010) { rowMin = W * 2; need = st * H * 3 / 2; }
         const bool yuv = in.fmt != LiveInput::RGBA;   // chroma is subsampled: even sizes
-        if (in.w < 2 || in.h < 2 || (yuv && ((in.w & 1) || (in.h & 1))) || st < rowMin || !in.data || in.size < need) {
+        if (in.reuse) {
+            // a redraw: only possible while the last upload is still in the raw images
+            if (!uploadValid_ || in.w != upW_ || in.h != upH_ || int(in.fmt) != upFmt_) { error.clear(); return false; }
+        } else if (in.w < 2 || in.h < 2 || (yuv && ((in.w & 1) || (in.h & 1))) || st < rowMin || !in.data || in.size < need) {
             error = "Incomplete frame from the source";
             return false;
         }
     }
-    if (!ensureLive(in.w, in.h, ow, oh, error, dw, dh, in.size)) return false;
+    if (!ensureLive(in.w, in.h, ow, oh, error, dw, dh, in.reuse ? 0 : in.size)) return false;
+    if (in.reuse && !uploadValid_) { error.clear(); return false; }   // the images were just made again
     hudLock_ = s.hudLock;
     collectRetired();
     if (in.fmt == LiveInput::P010 && !rawY16_.image) {   // HDR capture: 16-bit planes, created on first use
@@ -580,8 +586,11 @@ bool EnhanceChain::recordLive(VkCommandBuffer cb, int slot, const LiveInput& in,
         if (!rawY16_.image || !rawUV16_.image) { error = "Out of GPU memory for HDR capture"; return false; }
     }
     const int sl = ((slot % VkContext::kSlots) + VkContext::kSlots) % VkContext::kSlots;
-    const size_t bytes = std::min<size_t>(in.size, size_t(liveStagingSize_));
-    std::memcpy(liveStaging_[sl].mapped, in.data, bytes);
+    if (!in.reuse) {
+        // after this copy the source's buffer is not needed any more (the renderer gives a capture buffer back now)
+        const size_t bytes = std::min<size_t>(in.size, size_t(liveStagingSize_));
+        std::memcpy(liveStaging_[sl].mapped, in.data, bytes);
+    }
 
     ctx_.beginExternal(cb, sl);
     timer_.begin(cb, sl);
@@ -615,7 +624,7 @@ bool EnhanceChain::recordLive(VkCommandBuffer cb, int slot, const LiveInput& in,
         vkCmdCopyBufferToImage(cb, st.buffer, img.image, VK_IMAGE_LAYOUT_GENERAL, 1, &c);
     };
     const uint32_t W = uint32_t(in.w), H = uint32_t(in.h);
-    switch (in.fmt) {
+    if (!in.reuse) switch (in.fmt) {
     case LiveInput::RGBA: copyTo(src_, 0, uint32_t(in.stride / 4), W, H); break;
     case LiveInput::YUYV:
     case LiveInput::UYVY: copyTo(rawPacked_, 0, uint32_t(in.stride / 4), W / 2, H); break;
@@ -628,6 +637,7 @@ bool EnhanceChain::recordLive(VkCommandBuffer cb, int slot, const LiveInput& in,
         copyTo(rawUV16_, VkDeviceSize(in.stride) * H, uint32_t(in.stride / 4), W / 2, H / 2);
         break;
     }
+    uploadValid_ = true; upW_ = in.w; upH_ = in.h; upFmt_ = int(in.fmt);
     ctx_.computeBarrier();
     if (in.fmt == LiveInput::P010) {
         // HDR: PQ/BT.2020 -> tone-mapped linear SDR straight into the working image (keeps all 10 bits)
@@ -820,6 +830,7 @@ bool EnhanceChain::recordFg(VkCommandBuffer cb) {
     } else {
         hudReset_ = true;
     }
+    timer_.mark(cb, GpuTimer::FrameGen);   // FSR frame generation (+ HUD lock)
     copyToDisplay(cb, reset ? out8_ : *shown);
     fgRealPending_ = !reset;
     return true;

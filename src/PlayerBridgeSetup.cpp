@@ -198,8 +198,8 @@ QString PlayerBridge::perfReport() {
         r << QString("Delay in VeyAmux: %1 ms, GPU %2 ms per picture").arg(liveVk_->pipelineMs(), 0, 'f', 1).arg(liveVk_->gpuMs(), 0, 'f', 2);
         const auto st = liveVk_->gpuStageMs();
         QStringList parts;
-        static const char* names[] = {"input", "anti-flicker/denoise", "AA", "upscale", "finish", "output"};
-        for (size_t k = 0; k < st.size() && k < 6; ++k) if (st[k] > 0) parts << QString("%1 %2").arg(names[k]).arg(st[k], 0, 'f', 2);
+        static const char* names[] = {"input", "anti-flicker/denoise", "AA", "upscale", "finish", "output", "frame generation"};
+        for (size_t k = 0; k < st.size() && k < 7; ++k) if (st[k] > 0) parts << QString("%1 %2").arg(names[k]).arg(st[k], 0, 'f', 2);
         if (!parts.isEmpty()) r << "GPU stages (ms): " + parts.join(", ");
     }
     updateOverlay();

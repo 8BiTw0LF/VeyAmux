@@ -653,7 +653,7 @@ private:
     struct BenchRow {
         QString section, name, source, threads, flag;
         double fps = 0, frameMs = 0, jitter = 0, p99 = 0, delay = 0, gpu = 0, cpu = 0, rssMb = 0;
-        std::array<double, 6> stages{};
+        std::array<double, veyamux::GpuTimer::kStages> stages{};
         int samples = 0, gpuFrames = 0;
     };
     struct Bench {
@@ -673,6 +673,7 @@ private:
         size_t prep = 0;                // the step being prepared
         bool retried = false;           // this step was measured again because it looked wrong
         bool onLowRes = false;          // the card runs its 1080p mode now
+        int switchTries = 0;
         double refFps = 0, refJitter = 0;
         veyamux::CaptureMode savedMode, lowMode;
         QString device, audio;
@@ -711,6 +712,7 @@ private:
     QImage compareLabel(const QString& text, bool accent) const;
     veyamux::CaptureMode curMode_;   // the capture card mode in use (fourcc 0: none / not a card)
     QString curDevice_, curAudio_;
+    QString lastCaptureError_;   // why the last capture did not start (benchmark, report)
     QString gpuDevice_;              // the Vulkan device's name (performance report)
     bool overRefreshNoticed_ = false;
     void checkOverRefresh();

@@ -14,7 +14,7 @@ namespace veyamux {
 
 class GpuTimer {
 public:
-    enum Stage { Input = 0, Denoise, AntiAlias, Upscale, Finish, Output, kStages };
+    enum Stage { Input = 0, Denoise, AntiAlias, Upscale, Finish, Output, FrameGen, kStages };
     static constexpr int kSlots = 4;
     static constexpr int kMarks = kStages + 1;   // mark 0 = start, mark i+1 = end of stage i
 

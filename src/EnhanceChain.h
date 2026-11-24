@@ -86,6 +86,7 @@ struct LiveInput {
     size_t size = 0;
     int w = 0, h = 0, stride = 0;     // stride in bytes (Y-plane stride for NV12)
     bool fullRange = false;
+    bool reuse = false;   // a redraw: the last uploaded picture is still on the GPU (no data; the capture buffer is back)
 };
 
 class EnhanceChain {
@@ -236,7 +237,9 @@ private:
     ImageRes dfOut_, dfPrev_[2], dfAl_[2], dfPrev2_[2];
     int dfCur_ = 0;
     bool dfHistory_ = false;
-    bool mvPrev_ = false;   // the shared motion estimator saw the previous frame (else its next field starts over)
+    bool mvPrev_ = false;
+    bool uploadValid_ = false;   // the raw upload images hold the last live picture (LiveInput::reuse)
+    int upW_ = 0, upH_ = 0, upFmt_ = -1;   // the shared motion estimator saw the previous frame (else its next field starts over)
     const ImageRes* recordDeflicker(const ImageRes* in, const ImageRes* mv);
     bool upHistory_ = false;          // FSR upscaling has seen the previous frame of this sequence
     std::string upError_;

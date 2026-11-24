@@ -60,6 +60,8 @@ public:
         // swaps it with a frame it no longer needs, so the capture thread gets an already allocated buffer back (no new
         // allocation and page faults for every picture: 12 MB per 4K NV12 frame).
         std::function<void(RawFrame&)> onLiveFrame;
+        // the card is about to be reopened: drop every capture buffer not yet drawn (capture thread)
+        std::function<void()> onReleaseLive;
         // Audio as heard (48 kHz stereo s16, before volume), with the time its first sample plays. Recording tap.
         std::function<void(const int16_t*, int frames, std::chrono::steady_clock::time_point)> onAudio;
     };
