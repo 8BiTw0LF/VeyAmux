@@ -300,32 +300,39 @@ void PlayerBridge::finishSignalTest(bool restore) {
     if (!ok.empty()) {
         double maxFps = 0, bestDelay = 1e9;
         long maxPix = 1;
-        // what the console sends, from the highest of the measurements: one game's measured rate wanders with the
-        // scene, so each mode is judged against the same value (a 120 fps mode is no smoother when the game sends 60)
-        double content = 0;
-        for (const auto& r : sig_.rows) if (r.measured) content = std::max(content, r.content);
-        auto rate = [content](const SigRow& r) { return content > 1 ? std::min(r.nominal, std::round(content)) : r.nominal; };
+        // What the game sends, as the middle of the measurements: one measurement wanders with the scene (and a single
+        // high one must not decide), and every mode is judged against the same value: with a 30 fps game a 60 or
+        // 120 fps mode only repeats pictures, so it is no smoother than a 30 fps mode.
+        std::vector<double> cs;
+        for (const auto& r : sig_.rows) if (r.measured && r.content > 1) cs.push_back(r.content);
+        std::sort(cs.begin(), cs.end());
+        const double content = cs.empty() ? 0 : std::round(cs[cs.size() / 2]);
+        sig_.content = content;
+        auto rate = [content](const SigRow& r) { return content > 1 ? std::min(r.nominal, content) : r.nominal; };
+        // how evenly the game's pictures are shown: uneven spacing (jitter) is judder you see, so it takes from the
+        // smoothness; ±a quarter of the game's frame time halves it (floor 0.3)
+        auto even = [&](const SigRow& r) { return std::clamp(1.0 - r.jitter / (0.5 * 1000.0 / std::max(1.0, rate(r))), 0.3, 1.0); };
+        auto smoothness = [&](const SigRow& r) { return rate(r) * even(r); };
         for (auto* r : ok) {
-            maxFps = std::max(maxFps, rate(*r));
+            maxFps = std::max(maxFps, smoothness(*r));
             maxPix = std::max(maxPix, pixels(r->mode));
             if (r->delay > 0) bestDelay = std::min(bestDelay, r->delay);
         }
-        // smoothness first (a game's frame rate is what you feel most), then sharpness (compressed counts a little
-        // less), then delay and how evenly the pictures came
+        // smoothness first (the game's frame rate, shown evenly), then sharpness (compressed counts a little less),
+        // then delay
         for (auto* r : ok) {
-            const double interval = 1000.0 / std::max(1.0, r->nominal);
-            r->score = 50.0 * rate(*r) / maxFps
+            r->score = 55.0 * smoothness(*r) / maxFps
                      + 25.0 * std::sqrt(double(pixels(r->mode)) / double(maxPix)) * (isMjpeg(r->mode.fourcc) ? 0.85 : 1.0)
                      // delay by the milliseconds it adds (a ratio would make 6 against 3 ms look as bad as 40 against 20)
-                     + 15.0 * (r->delay > 0 && bestDelay < 1e9 ? 1.0 - std::min(1.0, (r->delay - bestDelay) / 33.0) : 0.5)
-                     + 10.0 * (1.0 - std::min(1.0, r->jitter / (0.5 * interval)));
+                     + 20.0 * (r->delay > 0 && bestDelay < 1e9 ? 1.0 - std::min(1.0, (r->delay - bestDelay) / 33.0) : 0.5);
             if (r->decode == 2 && r->cpu > 100.0 * 0.5 * double(sysconf(_SC_NPROCESSORS_ONLN))) r->score -= 10;   // CPU nearly full
         }
         auto pick = [&](auto better) { SigRow* b = nullptr; for (auto* r : ok) if (!b || better(*r, *b)) b = r; return b; };
         rec = pick([](const SigRow& a, const SigRow& b) { return a.score > b.score; });
         SigRow* fast = pick([](const SigRow& a, const SigRow& b) { return a.delay > 0 && (b.delay <= 0 || a.delay < b.delay - 0.05); });
         SigRow* smooth = pick([&](const SigRow& a, const SigRow& b) {
-            return rate(a) > rate(b) + 1 || (std::abs(rate(a) - rate(b)) <= 1 && a.jitter < b.jitter);
+            const double sa = smoothness(a), sb = smoothness(b);
+            return sa > sb + 0.5 || (std::abs(sa - sb) <= 0.5 && a.jitter < b.jitter);
         });
         SigRow* sharp = pick([](const SigRow& a, const SigRow& b) {
             if (pixels(a.mode) != pixels(b.mode)) return pixels(a.mode) > pixels(b.mode);
@@ -338,12 +345,17 @@ void PlayerBridge::finishSignalTest(bool restore) {
         if (sharp) sharp->tags << L("Sharpest", "Skarpest");
     }
     if (sig_.text.isEmpty()) {
-        if (rec) sig_.text = L("Done. Recommended on this PC: %1", "Færdig. Anbefalet på denne pc: %1").arg(QString::fromStdString(rec->mode.label));
+        if (rec && sig_.content > 1)
+            sig_.text = L("Done. Recommended on this PC: %1 (the game sent about %2 fps during the test)",
+                          "Færdig. Anbefalet på denne pc: %1 (spillet sendte ca. %2 fps under testen)")
+                            .arg(QString::fromStdString(rec->mode.label)).arg(sig_.content, 0, 'f', 0);
+        else if (rec) sig_.text = L("Done. Recommended on this PC: %1", "Færdig. Anbefalet på denne pc: %1").arg(QString::fromStdString(rec->mode.label));
         else if (!sig_.rows.empty())
             sig_.text = L("Done, but no mode kept up on this PC. Try another USB port (USB 3, directly on the PC).",
                           "Færdig, men ingen tilstand kunne følge med på denne pc. Prøv en anden USB-port (USB 3, direkte på pc'en).");
     }
-    if (rec) qInfo("Signal test: recommended %s (decode %d)", rec->mode.label.c_str(), rec->decode);
+    if (rec) qInfo("Signal test: recommended %s (decode %d), game %.0f fps", rec->mode.label.c_str(), rec->decode, sig_.content);
+    for (const auto& r : sig_.rows) if (r.measured) qInfo("Signal test: score %.1f %s decode %d", r.score, r.mode.label.c_str(), r.decode);
     if (restore) {
         // back to what was playing; with nothing before, the recommendation stays on (the picture behind the dialog)
         if (sig_.hadCapture) startCapture(sig_.savedDevice, sig_.savedMode, sig_.savedAudio);
