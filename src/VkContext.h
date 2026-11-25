@@ -91,6 +91,9 @@ public:
     void beginFrame();
     // Record into a command buffer owned by someone else (Qt's frame). slot = Qt frame slot (descriptor/UBO ring).
     void beginExternal(VkCommandBuffer cb, int slot);
+    int slot() const { return slot_; }   // the slot of the frame being recorded (its earlier use has finished)
+    // A device-local buffer (not mapped), e.g. scratch memory for FSR 4. Free with vkDestroyBuffer + vkFreeMemory.
+    bool createDeviceBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer& buf, VkDeviceMemory& mem);
     void computeBarrier();   // compute/transfer -> compute/transfer
     void dispatch(VkPipeline pipeline,
                   const ImageRes* const* sampled, uint32_t sampledCount,

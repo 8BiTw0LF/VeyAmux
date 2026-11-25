@@ -43,6 +43,7 @@ EnhanceChain::~EnhanceChain() {
     counters_.destroy();
     releaseStream();
     fsrUp_.reset();
+    fsr4Up_.reset();
     fg_.reset();
     ctx_.destroy(nisScale_);
     ctx_.destroy(smaaArea_);
@@ -265,7 +266,8 @@ void EnhanceChain::recordPost(const ImageRes* start, const EnhanceSettings& s) {
     const bool fsr3 = s.enabled && s.upscaler == Upscaler::AmdFsr3 && !s.retroTv && !s.pixelActive() &&
                       (ow != w || oh != h || s.fsrNativeAa());
     static const bool ownFsrMotion = std::getenv("VEYAMUX_FSR_OWN_MOTION") != nullptr;   // the old way, to compare
-    const bool needMv = temporalNr || deflicker || (fsr3 && !ownFsrMotion);
+    const bool fsr4 = s.enabled && s.upscaler == Upscaler::AmdFsr4 && !s.retroTv && !s.pixelActive() && (ow != w || oh != h || s.fsrNativeAa());
+    const bool needMv = temporalNr || deflicker || (fsr3 && !ownFsrMotion) || fsr4;
     const ImageRes* mv = needMv ? recordMotion(start) : nullptr;
     if (!needMv) mvPrev_ = false;
     if (deflicker) cur = recordDeflicker(cur, mv);
@@ -326,7 +328,16 @@ void EnhanceChain::recordPost(const ImageRes* start, const EnhanceSettings& s) {
             upHistory_ = done;
             if (!done) { upError_ = e; upFailedKey_ = key; }
             else upError_.clear();
-        } else if (s.upscaler != Upscaler::AmdFsr3) {
+        } else if (s.upscaler == Upscaler::AmdFsr4 && key != upFailedKey_ && mv) {
+            // AMD FSR 4 (ML), fed with the shared motion estimate
+            std::string e;
+            if (!fsr4Up_) fsr4Up_ = std::make_unique<Fsr4Upscaler>(ctx_);
+            fsr4Up_->setDir(fsr4Dir_);
+            done = fsr4Up_->record(ctx_.active(), *cur, *mv, up_, !upHistory_, e);
+            upHistory_ = done;
+            if (!done) { upError_ = e; upFailedKey_ = key; }
+            else upError_.clear();
+        } else if (s.upscaler != Upscaler::AmdFsr3 && s.upscaler != Upscaler::AmdFsr4) {
             upHistory_ = false;
             upError_.clear();
             upFailedKey_ = 0;

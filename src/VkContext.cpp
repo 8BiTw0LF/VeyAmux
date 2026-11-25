@@ -361,6 +361,30 @@ BufferRes VkContext::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, b
     return r;
 }
 
+bool VkContext::createDeviceBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer& buf, VkDeviceMemory& mem) {
+    buf = VK_NULL_HANDLE;
+    mem = VK_NULL_HANDLE;
+    VkBufferCreateInfo bi{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    bi.size = size;
+    bi.usage = usage;
+    bi.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    if (vkCreateBuffer(device_, &bi, nullptr, &buf) != VK_SUCCESS) return false;
+    VkMemoryRequirements mr;
+    vkGetBufferMemoryRequirements(device_, buf, &mr);
+    uint32_t mt = findMemoryType(mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if (mt == UINT32_MAX) mt = findMemoryType(mr.memoryTypeBits, 0);
+    VkMemoryAllocateInfo ai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    ai.allocationSize = mr.size;
+    ai.memoryTypeIndex = mt;
+    if (mt == UINT32_MAX || vkAllocateMemory(device_, &ai, nullptr, &mem) != VK_SUCCESS) {
+        vkDestroyBuffer(device_, buf, nullptr);
+        buf = VK_NULL_HANDLE;
+        return false;
+    }
+    vkBindBufferMemory(device_, buf, mem, 0);
+    return true;
+}
+
 void VkContext::destroy(BufferRes& b) {
     if (!device_) return;
     if (b.mapped) vkUnmapMemory(device_, b.memory);
