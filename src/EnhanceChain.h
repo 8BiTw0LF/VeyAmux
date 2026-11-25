@@ -125,7 +125,7 @@ public:
     std::string upError() const { return upError_; }
     FsrUpscaler* upscaler() { return fsrUp_.get(); }   // test hook
     // AMD FSR 4: the add-on's folder (empty = not installed); whether this GPU can run it
-    void setFsr4Dir(const std::string& dir) { fsr4Dir_ = dir; }
+    void setFsr4Dir(const std::string& dir) { std::lock_guard l(fsr4M_); fsr4Dir_ = dir; }
     bool fsr4Supported(std::string* why = nullptr) const { return Fsr4Upscaler::supported(ctx_, why); }
     uint64_t liveGeneration() const { return liveGen_; }
     // a jump in the timeline (seek, new source): no temporal pass may blend across it, frame generation included
@@ -216,6 +216,7 @@ private:
     std::unique_ptr<FsrUpscaler> fsrUp_;
     std::unique_ptr<Fsr4Upscaler> fsr4Up_;
     std::string fsr4Dir_;
+    std::mutex fsr4M_;   // fsr4Dir_ is set from the UI thread
     std::unique_ptr<FsrFrameGen> fg_;
     uint32_t crtFrame_ = 0;          // Retro TV interlace field
     ImageRes nisScale_, nisUsm_;     // NIS filter coefficient tables (2 x 64 RGBA32F each)

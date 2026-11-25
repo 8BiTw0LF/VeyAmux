@@ -82,6 +82,9 @@ class PlayerBridge : public QObject {
     Q_PROPERTY(bool enhance READ enhance WRITE setEnhance NOTIFY enhanceChanged)
     Q_PROPERTY(double scale READ scale WRITE setScale NOTIFY enhanceChanged)
     Q_PROPERTY(int upscaler READ upscaler WRITE setUpscaler NOTIFY enhanceChanged)
+    // AMD FSR 4 add-on: 0 the GPU cannot run it, 1 not installed, 2 downloading, 3 ready, 4 not offered yet
+    Q_PROPERTY(int fsr4State READ fsr4State NOTIFY fsr4Changed)
+    Q_PROPERTY(QString fsr4Text READ fsr4Text NOTIFY fsr4Changed)
     Q_PROPERTY(QString upscalerError READ upscalerError NOTIFY statsChanged)
     // Frame generation: 0 off, 2 Lossless Scaling fixed 2x (default), 3 Lossless Scaling fixed 3x
     Q_PROPERTY(int frameGenMode READ frameGenMode WRITE setFrameGenMode NOTIFY enhanceChanged)
@@ -393,6 +396,7 @@ public:
     QString lowLatencyMethod() const { return lowLatency_ ? lowLatency_->method() : QString(); }
     void setLiveVulkan(LiveVulkan* l) {
         liveVk_ = l;
+        if (l) { fsr4Dir_ = fsr4InstalledDir(); l->setFsr4Dir(fsr4Dir_); }
         if (l) {
             connect(l, &LiveVulkan::outputChanged, this, &PlayerBridge::frameReady);   // VideoItem re-syncs
             l->setSettings(s_);
@@ -470,6 +474,10 @@ public:
     bool gpuCounters() const { return gpuCounters_; }
     void setGpuCounters(bool on);
     Q_INVOKABLE QString gpuCounterText() const;   // averages since switched on (or the last benchmark step)
+    int fsr4State() const;
+    QString fsr4Text() const { return fsr4Text_; }
+    Q_INVOKABLE void installFsr4();
+    static QString fsr4InstalledDir();
     Q_INVOKABLE QVariantList debugSwitches() const;        // [{env, title, detail, on}]
     Q_INVOKABLE void setDebugSwitch(const QString& env, bool on);
     bool debugRestartNeeded() const { return debugRestart_; }       // F6: notes this moment of the recording in "<recording>-markers.txt"
@@ -622,6 +630,7 @@ signals:
     void overlayChanged();
     void overlayTick();
     void benchChanged();
+    void fsr4Changed();
     void signalTestChanged();
     void recTick();
 
@@ -725,6 +734,9 @@ private:
     QString lastReport_;
     LowLatency* lowLatency_ = nullptr;
     bool gpuCounters_ = false;
+    bool fsr4Busy_ = false;
+    QString fsr4Text_;
+    QString fsr4Dir_;   // the installed add-on (empty: none)
     struct SigCand { veyamux::CaptureMode mode; int decode = 0; };   // decode: 0 not MJPEG, 1 graphics card, 2 CPU
     struct SigRow {
         veyamux::CaptureMode mode;

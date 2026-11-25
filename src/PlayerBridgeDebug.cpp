@@ -406,6 +406,7 @@ void PlayerBridge::startBenchmark() {
     add(M, "Anti-flicker", [](EnhanceSettings& e) { e.deflicker = true; });
     add(M, "Anti-flicker + temporal medium", [](EnhanceSettings& e) { e.deflicker = true; e.denoise = Denoise::Temporal; e.denoiseStrength = 1; });
     add(M, "FSR 3.1 native (TAA)", [](EnhanceSettings& e) { e.upscaler = Upscaler::AmdFsr3; });
+    if (fsr4State() == 3) add(M, "FSR 4 native (AA)", [](EnhanceSettings& e) { e.upscaler = Upscaler::AmdFsr4; });
     add(M, "FSR 3.1 native + temporal medium", [](EnhanceSettings& e) { e.upscaler = Upscaler::AmdFsr3; e.denoise = Denoise::Temporal; e.denoiseStrength = 1; });
     if (upNative || lowRes) {
         const bool low = !upNative;
@@ -414,6 +415,10 @@ void PlayerBridge::startBenchmark() {
         for (const auto& [up, label] : ups)
             add(U, QString("%1Upscale 2× %2").arg(low ? "1080p: " : "", label), [up = up](EnhanceSettings& e) { e.scale = 2; e.upscaler = up; }, low);
         add(U, QString("%1Upscale 1.5× FSR 3.1").arg(low ? "1080p: " : ""), [](EnhanceSettings& e) { e.scale = 1.5f; e.upscaler = Upscaler::AmdFsr3; }, low);
+        if (fsr4State() == 3) {
+            add(U, QString("%1Upscale 2× FSR 4").arg(low ? "1080p: " : ""), [](EnhanceSettings& e) { e.scale = 2; e.upscaler = Upscaler::AmdFsr4; }, low);
+            add(U, QString("%1Upscale 1.5× FSR 4").arg(low ? "1080p: " : ""), [](EnhanceSettings& e) { e.scale = 1.5f; e.upscaler = Upscaler::AmdFsr4; }, low);
+        }
         add(U, QString("%1Heavy: both medium + anti-flicker + SMAA + 2× FSR 3.1").arg(low ? "1080p: " : ""), [](EnhanceSettings& e) {
             e.denoise = Denoise::Both; e.denoiseStrength = 1; e.deflicker = true; e.fxaa = true; e.smaa = true;
             e.upscaler = Upscaler::AmdFsr3; e.scale = 2;

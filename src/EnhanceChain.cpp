@@ -332,7 +332,7 @@ void EnhanceChain::recordPost(const ImageRes* start, const EnhanceSettings& s) {
             // AMD FSR 4 (ML), fed with the shared motion estimate
             std::string e;
             if (!fsr4Up_) fsr4Up_ = std::make_unique<Fsr4Upscaler>(ctx_);
-            fsr4Up_->setDir(fsr4Dir_);
+            { std::lock_guard l(fsr4M_); fsr4Up_->setDir(fsr4Dir_); }
             done = fsr4Up_->record(ctx_.active(), *cur, *mv, up_, !upHistory_, e);
             upHistory_ = done;
             if (!done) { upError_ = e; upFailedKey_ = key; }

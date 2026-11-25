@@ -187,19 +187,26 @@ Rectangle {
                         Label_ { text: tr("method") }
                         Segmented {
                             width: parent.width; enabled: player.enhance
-                            readonly property var values: [0, 2, 1, 3]   // SGSR | FSR 1 | FSR 3.1 | NIS
-                            model: ["SGSR", "FSR 1", "FSR 3.1", "NIS"]
+                            readonly property var values: [0, 2, 1, 4, 3]   // SGSR | FSR 1 | FSR 3.1 | FSR 4 | NIS
+                            model: ["SGSR", "FSR 1", "FSR 3.1", "FSR 4", "NIS"]
                             current: Math.max(0, values.indexOf(player.upscaler))
                             onPicked: (i) => player.upscaler = values[i]
                         }
                         Hint {
-                            color: player.upscalerError !== "" ? Theme.warn : Theme.muted
-                            text: player.upscalerError !== "" ? tr("fsrFallback") + player.upscalerError
+                            // FSR 4 not installed (or not possible here) explains itself instead of a fallback warning
+                            readonly property bool fsr4Waiting: player.upscaler === 4 && player.fsr4State !== 3
+                            color: player.upscalerError !== "" && !fsr4Waiting ? Theme.warn : Theme.muted
+                            text: player.upscalerError !== "" && !fsr4Waiting ? tr("fsrFallback") + player.upscalerError
                                   : (player.upscaler === 1 ? (player.scale <= 1.001 ? tr("fsrNativeAaHint") : tr("fsr31Hint"))
                                      : player.upscaler === 2 ? tr("fsr1Hint") + (player.scale <= 1.001 ? " " + tr("fsrNeedsScale") : "")
                                      : player.upscaler === 3 ? tr("nisHint") + (player.scale <= 1.001 ? " " + tr("fsrNeedsScale") : "")
+                                     : player.upscaler === 4 ? (player.fsr4State === 3 ? tr("fsr4Hint") : player.fsr4State === 0 ? tr("fsr4NoGpu")
+                                                                : player.fsr4State === 2 ? player.fsr4Text : player.fsr4State === 4 ? tr("fsr4NotYet")
+                                                                : tr("fsr4Download") + (player.fsr4Text !== "" ? "\n" + player.fsr4Text : ""))
                                                              : tr("sgsrHint"))
                         }
+                        // FSR 4 is an add-on (AMD's MIT code, built separately): fetched on request
+                        Btn { visible: player.upscaler === 4 && player.fsr4State === 1; text: tr("fsr4Get"); primary: true; onClicked: player.installFsr4() }
                     }
                     Sep {}
                     Column {

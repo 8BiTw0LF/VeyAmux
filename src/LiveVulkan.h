@@ -35,6 +35,8 @@ public:
     void resetGpuSums();
     // VeyAmux Debug: hardware counters around the live work (EnhanceChain / GpuCounters)
     bool countersAvailable() const;
+    void setFsr4Dir(const QString& dir);
+    bool fsr4Supported(QString* why) const;
     bool setCountersEnabled(bool on);
     std::vector<veyamux::GpuCounters::Value> counterValues() const;
     ~LiveVulkan() override;
