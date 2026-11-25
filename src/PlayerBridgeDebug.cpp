@@ -412,7 +412,7 @@ void PlayerBridge::startBenchmark() {
     if (upNative || lowRes) {
         const bool low = !upNative;
         if (low) add(U, "1080p: enhance on, nothing else", nullptr, true);
-        const std::pair<Upscaler, const char*> ups[] = {{Upscaler::Sgsr, "SGSR"}, {Upscaler::AmdFsr1, "FSR 1"}, {Upscaler::Nis, "NIS"}, {Upscaler::AmdFsr3, "FSR 3.1"}};
+        const std::pair<Upscaler, const char*> ups[] = {{Upscaler::Nis, "NIS"}, {Upscaler::Sgsr, "SGSR"}, {Upscaler::AmdFsr3, "FSR 3.1"}};
         for (const auto& [up, label] : ups)
             add(U, QString("%1Upscale 2× %2").arg(low ? "1080p: " : "", label), [up = up](EnhanceSettings& e) { e.scale = 2; e.upscaler = up; }, low);
         add(U, QString("%1Upscale 1.5× FSR 3.1").arg(low ? "1080p: " : ""), [](EnhanceSettings& e) { e.scale = 1.5f; e.upscaler = Upscaler::AmdFsr3; }, low);

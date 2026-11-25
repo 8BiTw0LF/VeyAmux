@@ -149,7 +149,7 @@ class PlayerBridge : public QObject {
     Q_PROPERTY(bool pacingRepair READ pacingRepair WRITE setPacingRepair NOTIFY enhanceChanged)
     // AMD Anti-Lag / NVIDIA Reflex for the window (LowLatency); method is empty when the GPU/driver has neither
     Q_PROPERTY(bool lowLatency READ lowLatency WRITE setLowLatencyOn NOTIFY enhanceChanged)
-    Q_PROPERTY(QString lowLatencyMethod READ lowLatencyMethod CONSTANT)
+    Q_PROPERTY(QString lowLatencyMethod READ lowLatencyMethod NOTIFY enhanceChanged)   // set after the window exists (main.cpp)
     Q_PROPERTY(bool hudLock READ hudLock WRITE setHudLock NOTIFY enhanceChanged)
     // the desktop has VRR on for a screen while Lossless Scaling is chosen: lsfg-vk 2 cannot pace its frames then
     Q_PROPERTY(bool lsfgVrrWarning READ lsfgVrrWarning NOTIFY lsfgChanged)
@@ -386,6 +386,7 @@ public:
     void setLowLatency(LowLatency* l) {
         lowLatency_ = l;
         if (l) l->setEnabled(QSettings().value("disp/lowLatency", false).toBool());
+        emit enhanceChanged();   // QML has already read lowLatencyMethod (empty) when this arrives
     }
     bool lowLatency() const { return lowLatency_ && lowLatency_->enabled(); }
     void setLowLatencyOn(bool v) {

@@ -1,5 +1,5 @@
 // VeyAmux for Linux - GPU enhancement chain built from the original Veyra (Windows) HLSL shaders (compiled to SPIR-V).
-//   RGBA8 -> RgbToLinear -> [AaLuma+AaFxaa] -> [SGSR, AMD FSR 1, NIS or AMD FSR 3.1 upscale] -> [Sharpen/Grade] -> ScaleBlit(sRGB encode) -> RGBA8
+//   RGBA8 -> RgbToLinear -> [AaLuma+AaFxaa] -> [SGSR, NIS, AMD FSR 3.1 or AMD FSR 4 upscale] -> [Sharpen/Grade] -> ScaleBlit(sRGB encode) -> RGBA8
 #pragma once
 #include <chrono>
 #include <atomic>
@@ -26,7 +26,13 @@ enum class FrameGenMode { Off = 0, LsfgFixed = 2, LsfgFixed3 = 3, FsrFree = 5 };
 // Denoisers (run first, on the source-size linear image, before FXAA/upscaling/sharpening).
 enum class Denoise { Off = 0, Spatial = 1, Temporal = 2, Both = 3 };
 // Upscaling method used when scale > 1. AmdFsr3 falls back to SGSR if FidelityFX cannot run.
-enum class Upscaler { Sgsr = 0, AmdFsr3 = 1, AmdFsr1 = 2, Nis = 3, AmdFsr4 = 4 };   // FSR 4 = AMD's ML upscaler (add-on)   // NIS = NVIDIA Image Scaling (spatial, any GPU)   // FSR 1 = EASU + RCAS (spatial, one frame)
+// The numbers are saved in settings and profiles. 2 was AMD FSR 1 (removed in 1.9.x debug); it now means SGSR.
+// NIS = NVIDIA Image Scaling (spatial, any GPU); FSR 4 = AMD's ML upscaler (add-on)
+enum class Upscaler { Sgsr = 0, AmdFsr3 = 1, Nis = 3, AmdFsr4 = 4 };
+inline Upscaler upscalerFromSetting(int v) { return v == 1 || v == 3 || v == 4 ? Upscaler(v) : Upscaler::Sgsr; }
+inline const char* upscalerName(Upscaler u) {
+    switch (u) { case Upscaler::AmdFsr3: return "FSR 3.1"; case Upscaler::Nis: return "NIS"; case Upscaler::AmdFsr4: return "FSR 4"; default: return "SGSR"; }
+}
 
 struct EnhanceSettings {
     bool enabled = true;

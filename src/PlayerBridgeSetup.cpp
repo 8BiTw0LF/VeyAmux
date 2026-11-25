@@ -179,10 +179,9 @@ QString PlayerBridge::perfReport() {
     } else {
         r << "Source: none";
     }
-    static const char* ups[] = {"SGSR", "FSR 3.1", "FSR 1", "NIS"};
     static const char* nr[] = {"off", "spatial", "temporal", "both"};
     r << QString("Picture: enhance %1, %2 %3x, noise reduction %4/%5, AA %6, anti-flicker %7, sharpen %8, texture %9 clarity %10 dehaze %11")
-             .arg(s_.enabled ? "on" : "off").arg(ups[std::clamp(int(s_.upscaler), 0, 3)]).arg(double(s_.scale))
+             .arg(s_.enabled ? "on" : "off").arg(veyamux::upscalerName(s_.upscaler)).arg(double(s_.scale))
              .arg(nr[std::clamp(int(s_.denoise), 0, 3)]).arg(s_.denoiseStrength)
              .arg(s_.fxaa ? (s_.smaa ? "SMAA" : "FXAA") + QString(" q%1").arg(s_.fxaaQuality) : QString("off"))
              .arg(s_.deflicker ? "on" : "off").arg(double(s_.sharpen), 0, 'f', 2)
