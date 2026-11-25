@@ -333,7 +333,9 @@ void EnhanceChain::recordPost(const ImageRes* start, const EnhanceSettings& s) {
             std::string e;
             if (!fsr4Up_) fsr4Up_ = std::make_unique<Fsr4Upscaler>(ctx_);
             { std::lock_guard l(fsr4M_); fsr4Up_->setDir(fsr4Dir_); }
+            fsr4Up_->setFp8Allowed(!s.fsr4Int8);
             done = fsr4Up_->record(ctx_.active(), *cur, *mv, up_, !upHistory_, e);
+            { std::lock_guard l(fsr4M_); fsr4Path_ = done ? fsr4Up_->pathName() : ""; fsr4Fp8Why_ = fsr4Up_->fp8Why(); }
             upHistory_ = done;
             if (!done) { upError_ = e; upFailedKey_ = key; }
             else upError_.clear();
@@ -341,6 +343,8 @@ void EnhanceChain::recordPost(const ImageRes* start, const EnhanceSettings& s) {
             upHistory_ = false;
             upError_.clear();
             upFailedKey_ = 0;
+            std::lock_guard l(fsr4M_);
+            fsr4Path_.clear();
         }
         // FSR 3.1 native AA that could not start: the picture stays as it is
         const bool skip = !done && ow == w && oh == h;

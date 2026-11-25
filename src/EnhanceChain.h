@@ -39,6 +39,7 @@ struct EnhanceSettings {
     float scale = 1.0f;       // output scale factor (>=1)
     Upscaler upscaler = Upscaler::Sgsr;
     bool fxaa = false;
+    bool fsr4Int8 = false;    // FSR 4 on the INT8 network even where the FP8 one (matrix units) can run (benchmark)
     bool deflicker = false;   // anti-flicker: calms pixels that flicker between frames (LxDeflicker)
     // FSR 3.1 at the native size (scale 1): AMD's "native AA", i.e. temporal anti-aliasing
     bool fsrNativeAa() const { return enabled && (upscaler == Upscaler::AmdFsr3 || upscaler == Upscaler::AmdFsr4) && scale <= 1.001f && !retroTv && !pixelPerfect; }
@@ -133,6 +134,10 @@ public:
     // AMD FSR 4: the add-on's folder (empty = not installed); whether this GPU can run it
     void setFsr4Dir(const std::string& dir) { std::lock_guard l(fsr4M_); fsr4Dir_ = dir; }
     bool fsr4Supported(std::string* why = nullptr) const { return Fsr4Upscaler::supported(ctx_, why); }
+    bool fsr4Fp8Supported(std::string* why = nullptr) const { return Fsr4Upscaler::fp8Supported(ctx_, why); }
+    // "FP8" / "INT8" while FSR 4 runs (else empty), and why it is not FP8
+    std::string fsr4Path() const { std::lock_guard l(fsr4M_); return fsr4Path_; }
+    std::string fsr4Fp8Why() const { std::lock_guard l(fsr4M_); return fsr4Fp8Why_; }
     uint64_t liveGeneration() const { return liveGen_; }
     // a jump in the timeline (seek, new source): no temporal pass may blend across it, frame generation included
     void resetHistory() { upHistory_ = false; nrHistory_ = false; dfHistory_ = false; mvPrev_ = false; fgReset_ = true; hudReset_ = true; }
@@ -222,7 +227,8 @@ private:
     std::unique_ptr<FsrUpscaler> fsrUp_;
     std::unique_ptr<Fsr4Upscaler> fsr4Up_;
     std::string fsr4Dir_;
-    std::mutex fsr4M_;   // fsr4Dir_ is set from the UI thread
+    std::string fsr4Path_, fsr4Fp8Why_;
+    mutable std::mutex fsr4M_;   // fsr4Dir_ is set from the UI thread, fsr4Path_ read from it
     std::unique_ptr<FsrFrameGen> fg_;
     uint32_t crtFrame_ = 0;          // Retro TV interlace field
     ImageRes nisScale_, nisUsm_;     // NIS filter coefficient tables (2 x 64 RGBA32F each)

@@ -199,7 +199,7 @@ Rectangle {
                             text: player.upscalerError !== "" && !fsr4Waiting ? tr("fsrFallback") + player.upscalerError
                                   : (player.upscaler === 1 ? (player.scale <= 1.001 ? tr("fsrNativeAaHint") : tr("fsr31Hint"))
                                      : player.upscaler === 3 ? tr("nisHint") + (player.scale <= 1.001 ? " " + tr("fsrNeedsScale") : "")
-                                     : player.upscaler === 4 ? (player.fsr4State === 3 ? tr("fsr4Hint") : player.fsr4State === 0 ? tr("fsr4NoGpu")
+                                     : player.upscaler === 4 ? (player.fsr4State === 3 ? tr("fsr4Hint") + (player.fsr4Path !== "" ? " (" + player.fsr4Path + ")" : "") : player.fsr4State === 0 ? tr("fsr4NoGpu")
                                                                 : player.fsr4State === 2 ? player.fsr4Text : player.fsr4State === 4 ? tr("fsr4NotYet")
                                                                 : tr("fsr4Download") + (player.fsr4Text !== "" ? "\n" + player.fsr4Text : ""))
                                                              : tr("sgsrHint"))

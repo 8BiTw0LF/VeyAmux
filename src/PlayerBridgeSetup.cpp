@@ -186,6 +186,15 @@ QString PlayerBridge::perfReport() {
              .arg(s_.fxaa ? (s_.smaa ? "SMAA" : "FXAA") + QString(" q%1").arg(s_.fxaaQuality) : QString("off"))
              .arg(s_.deflicker ? "on" : "off").arg(double(s_.sharpen), 0, 'f', 2)
              .arg(double(s_.texture), 0, 'f', 2).arg(double(s_.clarity), 0, 'f', 2).arg(double(s_.dehaze), 0, 'f', 2);
+    if (liveVk_) {
+        QString why;
+        const bool fp8 = liveVk_->fsr4Fp8Supported(&why);
+        r << QString("FSR 4: add-on %1; FP8 on the matrix units %2; running now: %3")
+                 .arg(fsr4Dir_.isEmpty() ? QString("not installed") : fsr4Dir_)
+                 .arg(fp8 ? QString("possible") : "not possible (" + why + ")")
+                 .arg(liveVk_->fsr4Path().isEmpty() ? QString("-") : liveVk_->fsr4Path() +
+                      (liveVk_->fsr4Fp8Why().isEmpty() ? QString() : " (" + liveVk_->fsr4Fp8Why() + ")"));
+    }
     QString fg = "off";
     if (s_.lsfgFg()) fg = QString("Lossless Scaling %1x (lsfg-vk %2, %3)").arg(s_.frameGen == veyamux::FrameGenMode::LsfgFixed3 ? 3 : 2)
                               .arg(lsfg_.layerV2 ? "2" : lsfg_.layerManifest.isEmpty() ? "missing" : "1").arg(lsfgState());

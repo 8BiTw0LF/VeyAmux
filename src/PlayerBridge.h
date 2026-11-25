@@ -86,6 +86,7 @@ class PlayerBridge : public QObject {
     Q_PROPERTY(int fsr4State READ fsr4State NOTIFY fsr4Changed)
     Q_PROPERTY(QString fsr4Text READ fsr4Text NOTIFY fsr4Changed)
     Q_PROPERTY(QString upscalerError READ upscalerError NOTIFY statsChanged)
+    Q_PROPERTY(QString fsr4Path READ fsr4Path NOTIFY statsChanged)   // "FP8" / "INT8" while FSR 4 runs
     // Frame generation: 0 off, 2 Lossless Scaling fixed 2x (default), 3 Lossless Scaling fixed 3x
     Q_PROPERTY(int frameGenMode READ frameGenMode WRITE setFrameGenMode NOTIFY enhanceChanged)
     Q_PROPERTY(bool lsfgPerformance READ lsfgPerformance WRITE setLsfgPerformance NOTIFY lsfgChanged)
@@ -243,6 +244,7 @@ public:
     double scale() const { return s_.scale; }
     int upscaler() const { return int(s_.upscaler); }
     QString upscalerError() const { return upError_; }
+    QString fsr4Path() const { return liveVk_ && s_.upscaler == veyamux::Upscaler::AmdFsr4 ? liveVk_->fsr4Path() : QString(); }
     bool fxaa() const { return s_.fxaa; }
     bool deflicker() const { return s_.deflicker; }
     bool retroTv() const { return s_.retroTv; }
@@ -398,6 +400,9 @@ public:
     void setLiveVulkan(LiveVulkan* l) {
         liveVk_ = l;
         if (l) { fsr4Dir_ = fsr4InstalledDir(); l->setFsr4Dir(fsr4Dir_); }
+        // QML has already read the properties that depend on the live path (hardware counters, FSR 4)
+        emit benchChanged();
+        emit fsr4Changed();
         if (l) {
             connect(l, &LiveVulkan::outputChanged, this, &PlayerBridge::frameReady);   // VideoItem re-syncs
             l->setSettings(s_);

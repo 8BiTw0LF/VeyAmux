@@ -169,12 +169,12 @@ PlayerBridge::PlayerBridge(const QString& shaderDir, QObject* parent)
             if (qEnvironmentVariableIsSet("VEYAMUX_DEBUG_FG"))
                 qInfo("timing:%s", qPrintable(timingText(liveVk_->gpuMs(), liveVk_->gpuStageMs(), liveVk_->lastMs(), pipe)));
             gpuName_ = L("Vulkan (shared with the UI)", "Vulkan (delt med brugerfladen)");
-            upError_ = s_.upscaler == veyamux::Upscaler::AmdFsr3 ? translateMessage(liveVk_->lastUpError()) : QString();
+            upError_ = (s_.upscaler == veyamux::Upscaler::AmdFsr3 || s_.upscaler == veyamux::Upscaler::AmdFsr4) ? translateMessage(liveVk_->lastUpError()) : QString();
             updateLsfgMultiplier();
             emit statsChanged();
             return;
         }
-        upError_ = s_.upscaler == veyamux::Upscaler::AmdFsr3 ? translateMessage(QString::fromStdString(st.upError)) : QString();
+        upError_ = (s_.upscaler == veyamux::Upscaler::AmdFsr3 || s_.upscaler == veyamux::Upscaler::AmdFsr4) ? translateMessage(QString::fromStdString(st.upError)) : QString();
         updateLsfgMultiplier();
         perf_ = delayText(st.gpuActive ? std::max(0.0, double(st.gpuMs)) + st.processMs : st.processMs, false, QSize(st.outW, st.outH))
                 + (st.dropped ? QString(" · %1 %2").arg(st.dropped).arg(L("dropped", "tabt")) : QString());
@@ -1590,7 +1590,7 @@ int PlayerBridge::fsr4State() const {
 void PlayerBridge::installFsr4() {
     if (fsr4Busy_) return;
     fsr4Busy_ = true;
-    fsr4Text_ = L("Downloading FSR 4 (about 9 MB)…", "Henter FSR 4 (ca. 9 MB)…");
+    fsr4Text_ = L("Downloading FSR 4 (about 10 MB)…", "Henter FSR 4 (ca. 10 MB)…");
     emit fsr4Changed();
     std::thread([this, quit = psQuit_] {
         auto last = std::make_shared<std::atomic<int>>(-1);
@@ -1598,7 +1598,7 @@ void PlayerBridge::installFsr4() {
             if (quit->load() || pc / 5 == last->load() / 5) return;
             last->store(pc);
             quit->post(this, [this, pc] {
-                fsr4Text_ = L("Downloading FSR 4 (about 9 MB)… %1 %", "Henter FSR 4 (ca. 9 MB)… %1 %").arg(pc);
+                fsr4Text_ = L("Downloading FSR 4 (about 10 MB)… %1 %", "Henter FSR 4 (ca. 10 MB)… %1 %").arg(pc);
                 emit fsr4Changed();
             });
         });
