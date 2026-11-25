@@ -115,7 +115,7 @@ target_link_libraries(veyamux_ffx PUBLIC Vulkan::Vulkan)
 
 # ---- Core (no Qt): Vulkan context + enhancement chain ----
 find_package(Threads REQUIRED)
-add_library(veyamux_core STATIC third_party/smaa/SmaaLookupTables.cpp src/VkContext.cpp src/EnhanceChain.cpp src/GpuTimer.cpp src/FsrUpscaler.cpp src/FsrFrameGen.cpp src/MotionEstimator.cpp)
+add_library(veyamux_core STATIC third_party/smaa/SmaaLookupTables.cpp src/VkContext.cpp src/EnhanceChain.cpp src/GpuTimer.cpp src/GpuCounters.cpp src/FsrUpscaler.cpp src/FsrFrameGen.cpp src/MotionEstimator.cpp)
 target_compile_definitions(veyamux_core PUBLIC VEYAMUX_GIT_SHA="${VEYAMUX_GIT_SHA}" VEYAMUX_BUILD_NUMBER=${VEYAMUX_BUILD_NUMBER})
 if(VEYAMUX_DEBUG_BUILD)
   target_compile_definitions(veyamux_core PUBLIC VEYAMUX_DEBUG_BUILD=1)

@@ -117,6 +117,25 @@ QString PlayerBridge::buildInfo() const {
     return QStringLiteral("VeyAmux%1 %2 · %3").arg(diag::kDebugBuild ? " Debug" : "", appVersion(), diag::gitSha());
 }
 
+void PlayerBridge::setGpuCounters(bool on) {
+    if (!liveVk_) return;
+    gpuCounters_ = on && liveVk_->setCountersEnabled(on);
+    if (!on) liveVk_->setCountersEnabled(false);
+    liveVk_->resetGpuSums();
+    emit benchChanged();
+}
+
+QString PlayerBridge::gpuCounterText() const {
+    if (!liveVk_ || !gpuCounters_) return {};
+    const auto v = liveVk_->counterValues();
+    if (v.empty() || v.front().frames == 0) return L("No frames counted yet.", "Ingen billeder talt endnu.");
+    QStringList r;
+    r << QStringLiteral("%1 frames:").arg(v.front().frames);
+    for (const auto& c : v)
+        r << QStringLiteral("%1: %2 %3").arg(QString::fromStdString(c.name)).arg(c.avg, 0, 'g', 5).arg(QString::fromStdString(c.unit));
+    return r.join('\n');
+}
+
 QVariantList PlayerBridge::debugSwitches() const {
     QVariantList out;
     QSettings q;
@@ -218,6 +237,7 @@ QString PlayerBridge::saveReport(const QString& note) {
     }
 
     o << "\n## Frame timing\n\n" << paceSummary() << "\n";
+    if (gpuCounters_) o << "\n## GPU hardware counters\n\n```\n" << gpuCounterText() << "\n```\n";
 
     if (!bench_.rows.empty()) o << "\n## Benchmark\n\n" << benchTable() << "\n";
 
@@ -534,6 +554,13 @@ void PlayerBridge::benchTick() {
     if (r.samples) r.delay /= r.samples;
     const auto g = liveVk_->gpuSums();
     r.gpuFrames = g.frames;
+    if (gpuCounters_) {
+        QStringList cs;
+        for (const auto& c : liveVk_->counterValues())
+            cs << QStringLiteral("%1=%2%3").arg(QString::fromStdString(c.name)).arg(c.avg, 0, 'g', 5)
+                      .arg(c.unit.empty() ? QString() : " " + QString::fromStdString(c.unit));
+        r.counters = cs.join("; ");
+    }
     r.gpu = g.frames ? g.total / g.frames : -1;
     for (size_t k = 0; k < r.stages.size() && k < g.stage.size(); ++k) r.stages[k] = g.ran[k] ? g.stage[k] / g.ran[k] : -1;
     std::vector<double> shown = liveVk_->shownTimes(), iv;
@@ -607,13 +634,13 @@ void PlayerBridge::finishBenchmark() {
           << (liveVk_ && liveVk_->context() ? vulkanDriver(liveVk_->context()) : QString()) << "\n";
         for (const QString& n : bench_.notes) o << "# " << n << "\n";
         o << "section,step,source,fps,frame_ms,jitter_ms,p99_ms,delay_ms,gpu_ms,gpu_input,gpu_denoise,gpu_aa,gpu_upscale,gpu_finish,gpu_output,gpu_framegen,"
-             "gpu_frames,cpu_pct,rss_mb,threads,flag\n";
+             "gpu_frames,cpu_pct,rss_mb,threads,flag,counters\n";
         for (const auto& b : bench_.rows) {
             o << '"' << b.section << "\",\"" << b.name << "\",\"" << b.source << '"';
             for (double v : {b.fps, b.frameMs, b.jitter, b.p99, b.delay, b.gpu}) o << ',' << QString::number(v, 'f', 3);
             for (double v : b.stages) o << ',' << (v < 0 ? QString() : QString::number(v, 'f', 3));
             o << ',' << b.gpuFrames << ',' << QString::number(b.cpu, 'f', 1) << ',' << QString::number(b.rssMb, 'f', 0)
-              << ",\"" << b.threads << "\"," << b.flag << '\n';
+              << ",\"" << b.threads << "\"," << b.flag << ",\"" << b.counters << "\"\n";
         }
         bench_.csv = path;
     }

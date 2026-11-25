@@ -44,6 +44,9 @@ class PlayerBridge : public QObject {
     Q_PROPERTY(double benchProgress READ benchProgress NOTIFY benchChanged)
     Q_PROPERTY(QString lastReport READ lastReport NOTIFY benchChanged)
     Q_PROPERTY(bool debugRestartNeeded READ debugRestartNeeded NOTIFY benchChanged)
+    // VeyAmux Debug: the graphics card's hardware counters (VK_KHR_performance_query, RDNA 4 and other recent GPUs)
+    Q_PROPERTY(bool gpuCountersAvailable READ gpuCountersAvailable NOTIFY benchChanged)
+    Q_PROPERTY(bool gpuCounters READ gpuCounters WRITE setGpuCounters NOTIFY benchChanged)
     // "Find the best signal" in the capture dialog (PlayerBridgeSignalTest.cpp)
     Q_PROPERTY(bool signalTestRunning READ signalTestRunning NOTIFY signalTestChanged)
     Q_PROPERTY(QString signalTestText READ signalTestText NOTIFY signalTestChanged)
@@ -463,6 +466,10 @@ public:
     double signalTestProgress() const { return sig_.cands.empty() ? 0.0 : double(sig_.i) / double(sig_.cands.size()); }
     QVariantList signalTestResults() const;
     void sampleSignalTest();   // test hook: made-up results, to show the dialog without a card
+    bool gpuCountersAvailable() const { return liveVk_ && liveVk_->countersAvailable(); }
+    bool gpuCounters() const { return gpuCounters_; }
+    void setGpuCounters(bool on);
+    Q_INVOKABLE QString gpuCounterText() const;   // averages since switched on (or the last benchmark step)
     Q_INVOKABLE QVariantList debugSwitches() const;        // [{env, title, detail, on}]
     Q_INVOKABLE void setDebugSwitch(const QString& env, bool on);
     bool debugRestartNeeded() const { return debugRestart_; }       // F6: notes this moment of the recording in "<recording>-markers.txt"
@@ -690,6 +697,7 @@ private:
         double fps = 0, frameMs = 0, jitter = 0, p99 = 0, delay = 0, gpu = 0, cpu = 0, rssMb = 0;
         std::array<double, veyamux::GpuTimer::kStages> stages{};
         int samples = 0, gpuFrames = 0;
+        QString counters;           // hardware counters (when switched on): "name=value unit; .."
     };
     struct Bench {
         bool running = false;
@@ -716,6 +724,7 @@ private:
     } bench_;
     QString lastReport_;
     LowLatency* lowLatency_ = nullptr;
+    bool gpuCounters_ = false;
     struct SigCand { veyamux::CaptureMode mode; int decode = 0; };   // decode: 0 not MJPEG, 1 graphics card, 2 CPU
     struct SigRow {
         veyamux::CaptureMode mode;

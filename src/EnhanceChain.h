@@ -8,6 +8,7 @@
 #include "FsrFrameGen.h"
 #include "MotionEstimator.h"
 #include "GpuTimer.h"
+#include "GpuCounters.h"
 #include <array>
 #include "VkContext.h"
 #include <map>
@@ -115,7 +116,11 @@ public:
     float gpuMs() const { return timer_.totalMs(); }
     std::array<float, GpuTimer::kStages> gpuStageMs() const { return timer_.stageMs(); }
     GpuTimer::Sums gpuSums() const { return timer_.sums(); }
-    void resetGpuSums() { timer_.resetSums(); }
+    void resetGpuSums() { timer_.resetSums(); counters_.reset(); }
+    // VeyAmux Debug: hardware counters (VK_KHR_performance_query)
+    bool countersAvailable() const { return counters_.available(); }
+    bool setCountersEnabled(bool on) { return counters_.setEnabled(on); }
+    std::vector<GpuCounters::Value> counterValues() const { return counters_.values(); }
     std::string upError() const { return upError_; }
     FsrUpscaler* upscaler() { return fsrUp_.get(); }   // test hook
     uint64_t liveGeneration() const { return liveGen_; }
@@ -228,6 +233,7 @@ private:
     // denoisers
     std::unique_ptr<MotionEstimator> nrMotion_;
     GpuTimer timer_;
+    GpuCounters counters_;   // VeyAmux Debug: hardware counters around the live work (when switched on)
     ImageRes nrOut_, nrHist_[2];
     int nrCur_ = 0;
     bool nrHistory_ = false;          // the temporal denoiser has a previous result of this sequence

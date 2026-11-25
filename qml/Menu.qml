@@ -645,6 +645,18 @@ Rectangle {
                         Hint { visible: player.benchText !== ""; text: player.benchText; color: Theme.label }
                     }
                     Sep {}
+                    // ---- hardware counters (VK_KHR_performance_query)
+                    Column {
+                        width: parent.width; spacing: 10
+                        Title { text: tr("dbgCounters") }
+                        SwitchRow { text: tr("dbgCountersOn"); active: player.gpuCountersAvailable; checked: player.gpuCounters
+                            onToggled: (v) => { player.gpuCounters = v; cntText.text = player.gpuCounterText() } }
+                        Hint { text: player.gpuCountersAvailable ? tr("dbgCountersHint") : tr("dbgCountersNone") }
+                        Text { id: cntText; visible: player.gpuCounters && text !== ""; width: parent.width; wrapMode: Text.Wrap
+                            font.family: "monospace"; font.pixelSize: 12; color: Theme.label }
+                        Btn { visible: player.gpuCounters; text: tr("dbgCountersRead"); onClicked: cntText.text = player.gpuCounterText() }
+                    }
+                    Sep {}
                     // ---- switches (environment variables at the next start)
                     Column {
                         width: parent.width; spacing: 10

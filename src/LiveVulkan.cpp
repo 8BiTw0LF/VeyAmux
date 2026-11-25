@@ -338,3 +338,7 @@ void LiveVulkan::publish(uint64_t handle, int w, int h, bool recreated, bool new
     }
 }
 
+
+bool LiveVulkan::countersAvailable() const { return chain_->countersAvailable(); }
+bool LiveVulkan::setCountersEnabled(bool on) { return chain_->setCountersEnabled(on); }
+std::vector<veyamux::GpuCounters::Value> LiveVulkan::counterValues() const { return chain_->counterValues(); }
