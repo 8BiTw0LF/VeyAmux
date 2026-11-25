@@ -415,6 +415,18 @@ void PlayerBridge::startBenchmark() {
         bench_.notes << L("Frame pacing left out: it only works with frame generation on.",
                           "Billedrytme udeladt: den virker kun med frame generation slået til.");
     }
+    if (lowLatency_ && lowLatency_->available()) {
+        const QString m = lowLatency_->method();
+        add(T, m + " off", nullptr);
+        bench_.steps.back().lowLatency = 0;
+        add(T, m + " on", nullptr);
+        bench_.steps.back().lowLatency = 1;
+        bench_.notes << L("The delay column ends when VeyAmux's picture is finished; the time it then waits for the screen (what Anti-Lag and Reflex shorten) is not in it.",
+                          "Forsinkelseskolonnen slutter, når VeyAmux' billede er færdigt; tiden det derefter venter på skærmen (det Anti-Lag og Reflex forkorter) er ikke med.");
+    } else {
+        bench_.notes << L("Low latency left out: this GPU/driver has neither AMD Anti-Lag nor NVIDIA Reflex.",
+                          "Lav forsinkelse udeladt: grafikkortet/driveren har hverken AMD Anti-Lag eller NVIDIA Reflex.");
+    }
     add(H, "Heavy: both medium + anti-flicker + SMAA + FSR 3.1 native", [](EnhanceSettings& e) {
         e.denoise = Denoise::Both; e.denoiseStrength = 1; e.deflicker = true; e.fxaa = true; e.smaa = true; e.upscaler = Upscaler::AmdFsr3;
     });
@@ -438,6 +450,7 @@ void PlayerBridge::benchApplyStep() {
     st.set(e);
     s_ = e;
     applyEnhance();
+    if (lowLatency_) lowLatency_->setEnabled(st.lowLatency >= 0 ? st.lowLatency == 1 : QSettings().value("disp/lowLatency", false).toBool());
     bench_.phase = 1;
     bench_.t0 = nowMs();
     bench_.cur = BenchRow{};
@@ -618,6 +631,7 @@ void PlayerBridge::stopBenchmark() { stopBenchmark(true); }
 
 void PlayerBridge::stopBenchmark(bool save) {
     if (bench_.timer) { bench_.timer->stop(); bench_.timer->deleteLater(); bench_.timer = nullptr; }
+    if (lowLatency_) lowLatency_->setEnabled(QSettings().value("disp/lowLatency", false).toBool());   // as the user set it
     if (save && bench_.running) {   // the stop button: keep what was measured
         bench_.notes << L("Stopped by hand.", "Stoppet i hånden.");
         finishBenchmark();

@@ -14,6 +14,7 @@
 #include <atomic>
 #include <QStandardPaths>
 #include "LiveVulkan.h"
+#include "LowLatency.h"
 #include "LosslessScaling.h"
 #include "MediaEngine.h"
 #include "ObsStream.h"
@@ -31,6 +32,7 @@
 #include <QWindow>
 #include <memory>
 
+class LowLatency;
 class PlayerBridge : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool hasMedia READ hasMedia NOTIFY mediaChanged)
@@ -139,6 +141,9 @@ class PlayerBridge : public QObject {
     Q_PROPERTY(bool vrr READ vrr WRITE setVrr NOTIFY enhanceChanged)
     // frame pacing repair for frame generation (MediaEngine / FramePacingRepair.h)
     Q_PROPERTY(bool pacingRepair READ pacingRepair WRITE setPacingRepair NOTIFY enhanceChanged)
+    // AMD Anti-Lag / NVIDIA Reflex for the window (LowLatency); method is empty when the GPU/driver has neither
+    Q_PROPERTY(bool lowLatency READ lowLatency WRITE setLowLatencyOn NOTIFY enhanceChanged)
+    Q_PROPERTY(QString lowLatencyMethod READ lowLatencyMethod CONSTANT)
     Q_PROPERTY(bool hudLock READ hudLock WRITE setHudLock NOTIFY enhanceChanged)
     // the desktop has VRR on for a screen while Lossless Scaling is chosen: lsfg-vk 2 cannot pace its frames then
     Q_PROPERTY(bool lsfgVrrWarning READ lsfgVrrWarning NOTIFY lsfgChanged)
@@ -372,6 +377,17 @@ public:
 
     QImage currentImage();
     void setGpuDevice(const QString& n) { gpuDevice_ = n; }
+    void setLowLatency(LowLatency* l) {
+        lowLatency_ = l;
+        if (l) l->setEnabled(QSettings().value("disp/lowLatency", false).toBool());
+    }
+    bool lowLatency() const { return lowLatency_ && lowLatency_->enabled(); }
+    void setLowLatencyOn(bool v) {
+        QSettings().setValue("disp/lowLatency", v);
+        if (lowLatency_) lowLatency_->setEnabled(v);
+        emit enhanceChanged();
+    }
+    QString lowLatencyMethod() const { return lowLatency_ ? lowLatency_->method() : QString(); }
     void setLiveVulkan(LiveVulkan* l) {
         liveVk_ = l;
         if (l) {
@@ -667,6 +683,7 @@ private:
         std::function<void(veyamux::EnhanceSettings&)> set;
         bool lowRes = false;        // runs on the card's 1080p mode (upscaling a 4K card's picture would make 8K)
         bool moreFrames = false;    // frame generation: the frame rate is meant to rise
+        int lowLatency = -1;        // AMD Anti-Lag / NVIDIA Reflex: -1 as set, 0 off, 1 on
     };
     struct BenchRow {
         QString section, name, source, threads, flag;
@@ -698,6 +715,7 @@ private:
         QString csv;
     } bench_;
     QString lastReport_;
+    LowLatency* lowLatency_ = nullptr;
     struct SigCand { veyamux::CaptureMode mode; int decode = 0; };   // decode: 0 not MJPEG, 1 graphics card, 2 CPU
     struct SigRow {
         veyamux::CaptureMode mode;

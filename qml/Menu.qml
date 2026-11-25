@@ -313,6 +313,17 @@ Rectangle {
                 Column {
                     visible: menu.tab === 2
                     width: parent.width; spacing: 16
+                    // AMD Anti-Lag / NVIDIA Reflex: a new capture picture waits less on its way to the screen
+                    Column {
+                        width: parent.width; spacing: 10
+                        Title { text: tr("lowLatency") }
+                        SwitchRow {
+                            text: player.lowLatencyMethod !== "" ? player.lowLatencyMethod : tr("lowLatencyNone")
+                            active: player.lowLatencyMethod !== ""
+                            checked: player.lowLatency; onToggled: (v) => player.lowLatency = v
+                        }
+                        Hint { text: player.lowLatencyMethod !== "" ? tr("lowLatencyHint") : tr("lowLatencyNoneHint") }
+                    }
                     Column {
                         width: parent.width; spacing: 10
                         Title { text: "HDR" }

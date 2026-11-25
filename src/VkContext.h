@@ -48,6 +48,18 @@ public:
 
     const std::string& deviceName() const { return deviceName_; }
     bool isSoftware() const { return software_; }
+    // What the device was created with, beyond the basics (all off on GPUs/drivers that lack them):
+    struct Caps {
+        bool antiLag = false;            // VK_AMD_anti_lag (RADV from Mesa 26.3, AMD's own drivers)
+        bool lowLatency2 = false;        // VK_NV_low_latency2 + VK_KHR_present_id (NVIDIA Reflex)
+        bool coopMatrix = false;         // VK_KHR_cooperative_matrix (matrix units: RDNA 3/4, NVIDIA tensor cores, Intel XMX)
+        bool coopMatrixM1 = false;       // VK_EXT_cooperative_matrix_maintenance1 (per-element ops, conversions)
+        bool float8 = false;             // VK_EXT_shader_float8 (FP8 in shaders and cooperative matrices: RDNA 4)
+        bool intDot = false;             // shaderIntegerDotProduct (packed int8 dot products)
+        bool perfQuery = false;          // VK_KHR_performance_query (hardware counters, VeyAmux Debug)
+        uint32_t vendor = 0;             // PCI vendor: 0x1002 AMD, 0x10de NVIDIA, 0x8086 Intel
+    };
+    const Caps& caps() const { return caps_; }
     VkDevice device() const { return device_; }
     VkInstance instance() const { return instance_; }
     VkPhysicalDevice physical() const { return phys_; }
@@ -117,6 +129,7 @@ private:
     std::string deviceName_;
     bool software_ = false;
     uint32_t apiVersion_ = 0;
+    Caps caps_;
 };
 
 } // namespace veyamux
