@@ -35,7 +35,7 @@ jobs:
             qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtquick-layouts qml6-module-qtqml-workerscript \
             libvulkan-dev libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libswresample-dev \
             libpulse-dev libva-dev libpipewire-0.3-dev mesa-vulkan-drivers \
-            libssl-dev libcurl4-openssl-dev libjson-c-dev libminiupnpc-dev libevent-dev libopus-dev
+            libssl-dev libcurl4-openssl-dev libjson-c-dev libminiupnpc-dev libevent-dev libopus-dev zlib1g-dev
 
       - name: Build AppImage
         working-directory: ${{ env.SRC }}
@@ -50,6 +50,8 @@ jobs:
         run: |
           # the live capture path: resizing, padded rows, short frames
           ./build/veyamux-live-test build/shaders
+          # games: the libretro frontend with a real emulator core
+          ./tests/run_retro_test.sh build
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -90,7 +92,7 @@ jobs:
             qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtquick-layouts qml6-module-qtqml-workerscript \
             libvulkan-dev libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libswresample-dev \
             libpulse-dev libva-dev libpipewire-0.3-dev mesa-vulkan-drivers \
-            libssl-dev libcurl4-openssl-dev libjson-c-dev libminiupnpc-dev libevent-dev libopus-dev
+            libssl-dev libcurl4-openssl-dev libjson-c-dev libminiupnpc-dev libevent-dev libopus-dev zlib1g-dev
 
       - name: Build VeyAmux Debug
         working-directory: ${{ env.SRC }}
@@ -104,7 +106,9 @@ jobs:
 
       - name: Tests (software Vulkan)
         working-directory: ${{ env.SRC }}
-        run: ./build-debug/veyamux-live-test build-debug/shaders
+        run: |
+          ./build-debug/veyamux-live-test build-debug/shaders
+          ./tests/run_retro_test.sh build-debug
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -148,7 +152,7 @@ jobs:
             qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtquick-layouts qml6-module-qtqml-workerscript \
             libvulkan-dev libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libswresample-dev \
             libpulse-dev libva-dev libpipewire-0.3-dev mesa-vulkan-drivers \
-            libssl-dev libcurl4-openssl-dev libjson-c-dev libminiupnpc-dev libevent-dev libopus-dev
+            libssl-dev libcurl4-openssl-dev libjson-c-dev libminiupnpc-dev libevent-dev libopus-dev zlib1g-dev
 
       - name: Build the tests with ASan + UBSan
         working-directory: ${{ env.SRC }}
