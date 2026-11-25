@@ -35,7 +35,7 @@ jobs:
             qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtquick-layouts qml6-module-qtqml-workerscript \
             libvulkan-dev libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libswresample-dev \
             libpulse-dev libva-dev libpipewire-0.3-dev mesa-vulkan-drivers \
-            libssl-dev libcurl4-openssl-dev libjson-c-dev libminiupnpc-dev libevent-dev libopus-dev zlib1g-dev
+            libssl-dev libcurl4-openssl-dev libjson-c-dev libminiupnpc-dev libevent-dev libopus-dev zlib1g-dev libarchive-dev
 
       - name: Build AppImage
         working-directory: ${{ env.SRC }}
@@ -92,7 +92,7 @@ jobs:
             qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtquick-layouts qml6-module-qtqml-workerscript \
             libvulkan-dev libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libswresample-dev \
             libpulse-dev libva-dev libpipewire-0.3-dev mesa-vulkan-drivers \
-            libssl-dev libcurl4-openssl-dev libjson-c-dev libminiupnpc-dev libevent-dev libopus-dev zlib1g-dev
+            libssl-dev libcurl4-openssl-dev libjson-c-dev libminiupnpc-dev libevent-dev libopus-dev zlib1g-dev libarchive-dev
 
       - name: Build VeyAmux Debug
         working-directory: ${{ env.SRC }}
@@ -152,7 +152,7 @@ jobs:
             qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtquick-layouts qml6-module-qtqml-workerscript \
             libvulkan-dev libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libswresample-dev \
             libpulse-dev libva-dev libpipewire-0.3-dev mesa-vulkan-drivers \
-            libssl-dev libcurl4-openssl-dev libjson-c-dev libminiupnpc-dev libevent-dev libopus-dev zlib1g-dev
+            libssl-dev libcurl4-openssl-dev libjson-c-dev libminiupnpc-dev libevent-dev libopus-dev zlib1g-dev libarchive-dev
 
       - name: Build the tests with ASan + UBSan
         working-directory: ${{ env.SRC }}
