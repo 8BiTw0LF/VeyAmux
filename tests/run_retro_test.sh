@@ -21,7 +21,9 @@ echo "464e14b7d42e7feea0b7ede42be7071dc88913f75b9ffa444299424b63d1dff1  $WORK/dm
 # a core that crashes after 40 frames: in the child process it must end the game, not the test
 SRC=$(cd "$(dirname "$0")" && pwd)
 cc -shared -fPIC -O1 -o "$WORK/crash_libretro.so" "$SRC/crash_core.c"
-"$BUILD/veyamux-retro-test" "$WORK/gambatte_libretro.so" "$WORK/dmg-acid2.gb" "$WORK/crash_libretro.so"
+# and one that draws with OpenGL (as N64 / Dreamcast / PSP emulators do): Mesa's software OpenGL on CI
+cc -shared -fPIC -O1 -o "$WORK/gl_libretro.so" "$SRC/gl_core.c"
+"$BUILD/veyamux-retro-test" "$WORK/gambatte_libretro.so" "$WORK/dmg-acid2.gb" "$WORK/crash_libretro.so" "$WORK/gl_libretro.so"
 
 # Genesis Plus GX (non-commercial licence; built here for the test only, never shipped) with a tiny Mega Drive
 # program made on the spot: it passes no data for "no disc control" on cartridges, which crashed VeyAmux once.

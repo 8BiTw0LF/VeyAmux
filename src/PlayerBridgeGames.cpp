@@ -102,8 +102,10 @@ void PlayerBridge::psPlayer(int player, quint32 buttons, double lx, double ly, d
 }
 
 // run-ahead and rewind, kept per system (games/<system>/runAhead, .../rewind); the defaults: 1 frame and rewind on for
-// cartridge systems, off for CD systems (their states are large and the emulators heavier)
-static bool cdSystem(const QString& s) { return s == "psx" || s == "saturn" || s == "segacd" || s == "pcecd"; }
+// cartridge systems, off for CD systems and the 3D ones (their states are large and the emulators heavier)
+static bool cdSystem(const QString& s) {
+    return s == "psx" || s == "saturn" || s == "segacd" || s == "pcecd" || s == "n64" || s == "nds" || s == "dc" || s == "psp";
+}
 int PlayerBridge::retroRunAhead() const {
     return QSettings().value("games/" + retroSystem_ + "/runAhead", cdSystem(retroSystem_) ? 0 : 1).toInt();
 }

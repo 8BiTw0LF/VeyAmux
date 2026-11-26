@@ -74,6 +74,15 @@ const std::vector<GameSystem>& gameSystems() {
          "syscard3.pce"},
         {"psx", "PlayStation", "Sony - PlayStation", "psx,ps1,playstation,playstation1,sonyplaystation,psone", "pbp",
          "cue,chd,pbp,m3u,ccd,iso,exe", "pcsx_rearmed,mednafen_psx,swanstation", true, "scph5501.bin (optional for PCSX ReARMed)"},
+        // drawn with OpenGL (RetroGl.h), except the DS emulators
+        {"n64", "Nintendo 64", "Nintendo - Nintendo 64", "n64,nintendo64,nintendonintendo64", "n64,z64,v64", "n64,z64,v64,zip,7z",
+         "mupen64plus_next,parallel_n64", true, ""},
+        {"nds", "Nintendo DS", "Nintendo - Nintendo DS", "nds,ds,nintendods,nintendonintendods", "nds", "nds,zip,7z",
+         "melondsds,melonds,desmume", false, ""},
+        {"dc", "Dreamcast", "Sega - Dreamcast", "dc,dreamcast,segadreamcast", "gdi,cdi", "gdi,cdi,chd,cue,m3u", "flycast", true,
+         "dc/dc_boot.bin, dc/dc_flash.bin (optional: Flycast has its own)"},
+        {"psp", "PSP", "Sony - PlayStation Portable", "psp,playstationportable,sonyplaystationportable", "cso", "iso,cso,pbp,chd",
+         "ppsspp", true, ""},
         {"a2600", "Atari 2600", "Atari - 2600", "atari2600,2600,a2600,atari", "a26", "a26,bin,zip", "stella,stella2014", false, ""},
         {"a7800", "Atari 7800", "Atari - 7800", "atari7800,7800,a7800", "a78", "a78,bin,zip", "prosystem", false, ""},
         {"lynx", "Atari Lynx", "Atari - Lynx", "lynx,atarilynx", "lnx", "lnx,zip", "handy,mednafen_lynx", false, "lynxboot.img"},
@@ -146,6 +155,8 @@ QString sniffDisc(const QString& path, int depth = 0) {
     if (!d.open(QIODevice::ReadOnly)) return {};
     const QByteArray head = d.read(1 << 20);
     if (head.contains("SEGA SEGASATURN")) return "saturn";
+    if (head.contains("SEGA SEGAKATANA")) return "dc";        // Dreamcast
+    if (head.contains("PSP GAME")) return "psp";              // the PSP's UMD volume name
     if (head.contains("SEGADISCSYSTEM") || head.contains("SEGA MEGA DRIVE") || head.contains("SEGA GENESIS")) return "segacd";
     if (head.contains("PC Engine CD-ROM SYSTEM")) return "pcecd";
     if (head.contains("PLAYSTATION") || head.contains("Sony Computer Entertainment")) return "psx";
@@ -174,8 +185,8 @@ QString detectSystem(const QString& path, const QString& root) {
         for (const auto& s : gameSystems()) {
             if (!listHas(s.folders, k)) continue;
             if (!listHas(s.folderExts, ext) && ext != "zip" && ext != "7z" && ext != "rar") return {};   // a file the system's games never are (a readme, a cover)
-            if ((ext == "cue" || ext == "chd" || ext == "iso" || ext == "m3u") && QString(s.id) != "psx" && QString(s.id) != "segacd"
-                && QString(s.id) != "saturn" && QString(s.id) != "pcecd") return {};
+            static const QStringList discSystems = {"psx", "segacd", "saturn", "pcecd", "dc", "psp"};
+            if ((ext == "cue" || ext == "chd" || ext == "iso" || ext == "m3u") && !discSystems.contains(QString(s.id))) return {};
             return s.id;
         }
     }

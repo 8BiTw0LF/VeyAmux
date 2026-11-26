@@ -1,5 +1,5 @@
 // VeyAmux for Linux: test of the libretro frontend (Libretro.h) with a core.
-//   veyamux-retro-test <core.so> <game file> [crash_core.so]
+//   veyamux-retro-test <core.so> <game file> [crash_core.so [gl_core.so]]
 // Runs the game for a second: pictures arrive at the core's rate in the expected size, sound comes out, a state can
 // be saved and loaded, and a zipped copy of the game loads too. Exit code 0 when all of it worked.
 #include "Libretro.h"
@@ -9,6 +9,7 @@
 #include <archive.h>
 #include <archive_entry.h>
 
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -192,6 +193,38 @@ int main(int argc, char** argv) {
         s.close();
         // and a game after it runs
         check(runOnce(argv[1], argv[2], dir, false), "the next game runs after a crash");
+    }
+    // an OpenGL core (as N64 / Dreamcast / PSP emulators are): its picture arrives the right way up, and the input
+    // reaches it (tests/gl_core.c: a red square in the bottom left corner, the rest green while B is held)
+    if (argc >= 5) {
+        retro::Game g;
+        g.core = argv[4]; g.rom = (dir / "x.gltest").string(); g.title = "gl";
+        std::ofstream(g.rom) << "x";
+        g.systemDir = g.saveDir = g.stateDir = dir.string();
+        retro::setGame(g);
+        retro::Stream s;
+        std::string e;
+        const bool opened = s.open(e);
+        check(opened, ("OpenGL core: opened " + e).c_str());
+        if (opened) {
+            RawFrame f;
+            auto pixel = [&](int x, int y) { const uint8_t* p = f.data.data() + (size_t(y) * f.w + x) * 4; return std::array<int, 3>{p[0], p[1], p[2]}; };
+            int frames = 0;
+            const auto t0 = std::chrono::steady_clock::now();
+            while (std::chrono::steady_clock::now() - t0 < std::chrono::seconds(1))
+                if (s.readLatest(f, 100, e) == retro::Stream::Result::Frame) ++frames;
+            const auto bl = pixel(2, f.h - 3), tl = pixel(2, 2);
+            std::printf("     %d pictures in 1 s, %dx%d, bottom left %d,%d,%d, top left %d,%d,%d\n", frames, f.w, f.h, bl[0], bl[1], bl[2], tl[0], tl[1], tl[2]);
+            check(frames > 40 && bl[0] > 200 && bl[1] < 50 && tl[0] < 50 && tl[1] < 50, "OpenGL core: pictures, the right way up");
+            retro::setPad(0, 1u << 0, 0, 0, 0, 0);   // B held
+            std::this_thread::sleep_for(std::chrono::milliseconds(150));
+            for (int i = 0; i < 5; ++i) s.readLatest(f, 100, e);
+            const auto green = pixel(f.w / 2, 2);
+            retro::setPad(0, 0, 0, 0, 0, 0);
+            std::printf("     B held: top %d,%d,%d\n", green[0], green[1], green[2]);
+            check(green[1] > 200 && green[0] < 50, "OpenGL core: the controller reaches it");
+            s.close();
+        }
     }
     // RetroAchievements signed in, the server out of reach (or answering no): the game runs and closes as without
     {

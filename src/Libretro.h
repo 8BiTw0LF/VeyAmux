@@ -4,7 +4,7 @@
 // the core's frame rate. Its picture is handed to VeyAmux like a capture card's (RGBA, the pixels scaled up by a whole
 // number with the core's aspect ratio, so every feature works on it: upscaling, Retro TV, frame generation,
 // recording); its sound goes out through the capture audio path ("@retro"); the controllers come from Gamepad.h.
-// Only cores that draw in software are used (no OpenGL / Vulkan cores).
+// Cores that draw with OpenGL get a context without a window (RetroGl.h); Vulkan cores are not used.
 //
 // The game to run is set with setGame() before the source is opened, like Remote Play's stream config.
 #pragma once

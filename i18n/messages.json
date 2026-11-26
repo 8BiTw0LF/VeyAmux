@@ -161,7 +161,8 @@
   "Achievement unlocked: ": "Achievement låst op: ",
   "All achievements in this game unlocked": "Alle achievements i dette spil er låst op",
   "Achievements unlocked so far: ": "Achievements låst op indtil nu: ",
-  "RetroAchievements sign-in failed: sign in again on the Games page": "RetroAchievements-login mislykkedes: log ind igen på Spil-siden"
+  "RetroAchievements sign-in failed: sign in again on the Games page": "RetroAchievements-login mislykkedes: log ind igen på Spil-siden",
+  "This emulator needs OpenGL: ": "Denne emulator kræver OpenGL: "
  },
  "de": {
   " (CPU)": " (CPU)",
@@ -419,7 +420,8 @@
   "Achievement unlocked: ": "Erfolg freigeschaltet: ",
   "All achievements in this game unlocked": "Alle Erfolge in diesem Spiel freigeschaltet",
   "Achievements unlocked so far: ": "Bisher freigeschaltete Erfolge: ",
-  "RetroAchievements sign-in failed: sign in again on the Games page": "RetroAchievements-Anmeldung fehlgeschlagen: melde dich auf der Spiele-Seite neu an"
+  "RetroAchievements sign-in failed: sign in again on the Games page": "RetroAchievements-Anmeldung fehlgeschlagen: melde dich auf der Spiele-Seite neu an",
+  "This emulator needs OpenGL: ": "Dieser Emulator braucht OpenGL: "
  },
  "es": {
   " (CPU)": " (CPU)",
@@ -677,7 +679,8 @@
   "Achievement unlocked: ": "Logro desbloqueado: ",
   "All achievements in this game unlocked": "Todos los logros de este juego desbloqueados",
   "Achievements unlocked so far: ": "Logros desbloqueados hasta ahora: ",
-  "RetroAchievements sign-in failed: sign in again on the Games page": "Error de sesión en RetroAchievements: vuelve a iniciar sesión en la página Juegos"
+  "RetroAchievements sign-in failed: sign in again on the Games page": "Error de sesión en RetroAchievements: vuelve a iniciar sesión en la página Juegos",
+  "This emulator needs OpenGL: ": "Este emulador necesita OpenGL: "
  },
  "fr": {
   " (CPU)": " (CPU)",
@@ -935,7 +938,8 @@
   "Achievement unlocked: ": "Succès débloqué : ",
   "All achievements in this game unlocked": "Tous les succès de ce jeu sont débloqués",
   "Achievements unlocked so far: ": "Succès débloqués jusqu'ici : ",
-  "RetroAchievements sign-in failed: sign in again on the Games page": "Échec de connexion RetroAchievements : reconnecte-toi sur la page Jeux"
+  "RetroAchievements sign-in failed: sign in again on the Games page": "Échec de connexion RetroAchievements : reconnecte-toi sur la page Jeux",
+  "This emulator needs OpenGL: ": "Cet émulateur a besoin d'OpenGL : "
  },
  "nb": {
   " (CPU)": " (CPU)",
@@ -1193,7 +1197,8 @@
   "Achievement unlocked: ": "Achievement låst opp: ",
   "All achievements in this game unlocked": "Alle achievements i dette spillet er låst opp",
   "Achievements unlocked so far: ": "Achievements låst opp så langt: ",
-  "RetroAchievements sign-in failed: sign in again on the Games page": "Innlogging på RetroAchievements mislyktes: logg inn igjen på Spill-siden"
+  "RetroAchievements sign-in failed: sign in again on the Games page": "Innlogging på RetroAchievements mislyktes: logg inn igjen på Spill-siden",
+  "This emulator needs OpenGL: ": "Denne emulatoren trenger OpenGL: "
  },
  "ru": {
   " (CPU)": " (CPU)",
@@ -1451,7 +1456,8 @@
   "Achievement unlocked: ": "Достижение получено: ",
   "All achievements in this game unlocked": "Все достижения в этой игре получены",
   "Achievements unlocked so far: ": "Получено достижений: ",
-  "RetroAchievements sign-in failed: sign in again on the Games page": "Не удалось войти в RetroAchievements: войдите снова на странице «Игры»"
+  "RetroAchievements sign-in failed: sign in again on the Games page": "Не удалось войти в RetroAchievements: войдите снова на странице «Игры»",
+  "This emulator needs OpenGL: ": "Этому эмулятору нужен OpenGL: "
  },
  "sv": {
   " (CPU)": " (CPU)",
@@ -1709,6 +1715,7 @@
   "Achievement unlocked: ": "Achievement upplåst: ",
   "All achievements in this game unlocked": "Alla achievements i det här spelet är upplåsta",
   "Achievements unlocked so far: ": "Achievements upplåsta hittills: ",
-  "RetroAchievements sign-in failed: sign in again on the Games page": "Inloggningen på RetroAchievements misslyckades: logga in igen på sidan Spel"
+  "RetroAchievements sign-in failed: sign in again on the Games page": "Inloggningen på RetroAchievements misslyckades: logga in igen på sidan Spel",
+  "This emulator needs OpenGL: ": "Den här emulatorn behöver OpenGL: "
  }
 }

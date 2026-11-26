@@ -3,6 +3,7 @@
 #include "CaptureSource.h"   // RawFrame
 #include "RetroRemote.h"     // the same, in a child process (VeyAmux), forwarded from the functions below
 #include "Achievements.h"
+#include "RetroGl.h"
 
 #include "../third_party/libretro/libretro.h"
 
@@ -163,6 +164,12 @@ retro_set_image_index_t diskSetIndex = nullptr;
 retro_get_num_images_t diskCount = nullptr;
 int diskInsertIn = 0;            // frames until the tray closes again after a change
 std::atomic<int> disksNow{0}, diskNow{0};
+// OpenGL cores (SET_HW_RENDER, RetroGl.h): what the core asked for, and its picture read back
+bool hwWanted = false;
+retro_hw_render_callback hwCb{};
+std::vector<uint8_t> hwPixels;
+uintptr_t RETRO_CALLCONV hwFramebuffer() { return gl::framebuffer(); }
+retro_proc_address_t RETRO_CALLCONV hwProc(const char* name) { return reinterpret_cast<retro_proc_address_t>(gl::procAddress(name)); }
 // the core's memory map (SET_MEMORY_MAPS), kept for RetroAchievements
 std::vector<retro_memory_descriptor> memDescs;
 retro_memory_map memMap{};                // one source row as RGBA
@@ -239,6 +246,18 @@ bool RETRO_CALLCONV environment(unsigned cmd, void* data) {
     case RETRO_ENVIRONMENT_SET_CONTENT_INFO_OVERRIDE: case RETRO_ENVIRONMENT_SET_MINIMUM_AUDIO_LATENCY:
         return true;
     case RETRO_ENVIRONMENT_GET_DISK_CONTROL_INTERFACE_VERSION: *static_cast<unsigned*>(data) = 1; return true;
+    // OpenGL: the core draws into VeyAmux's framebuffer (the context is made once the game is loaded)
+    case RETRO_ENVIRONMENT_SET_HW_RENDER: {
+        auto* cb = static_cast<retro_hw_render_callback*>(data);
+        if (!cb || !gl::supported(*cb)) return false;
+        cb->get_current_framebuffer = hwFramebuffer;
+        cb->get_proc_address = hwProc;
+        hwCb = *cb;
+        hwWanted = true;
+        return true;
+    }
+    case RETRO_ENVIRONMENT_GET_PREFERRED_HW_RENDER: *static_cast<unsigned*>(data) = RETRO_HW_CONTEXT_OPENGL_CORE; return true;
+    case RETRO_ENVIRONMENT_SET_HW_SHARED_CONTEXT: return true;
     case RETRO_ENVIRONMENT_SET_DISK_CONTROL_INTERFACE: {
         const auto* d = static_cast<const retro_disk_control_callback*>(data);
         if (!d) { diskEject = nullptr; diskGetIndex = nullptr; diskSetIndex = nullptr; diskCount = nullptr; return true; }   // no discs (a cartridge)
@@ -251,8 +270,6 @@ bool RETRO_CALLCONV environment(unsigned cmd, void* data) {
         diskEject = d->set_eject_state; diskGetIndex = d->get_image_index; diskSetIndex = d->set_image_index; diskCount = d->get_num_images;
         return true;
     }
-    case RETRO_ENVIRONMENT_SET_HW_RENDER: case RETRO_ENVIRONMENT_GET_PREFERRED_HW_RENDER:
-        return false;   // software cores only
     case RETRO_ENVIRONMENT_GET_INPUT_BITMASKS: return true;
     case RETRO_ENVIRONMENT_GET_INPUT_MAX_USERS: *static_cast<unsigned*>(data) = 4; return true;
     case RETRO_ENVIRONMENT_GET_INPUT_DEVICE_CAPABILITIES:
@@ -330,6 +347,14 @@ bool RETRO_CALLCONV environment(unsigned cmd, void* data) {
 void RETRO_CALLCONV videoRefresh(const void* data, unsigned w, unsigned h, size_t pitch) {
     Runner* r = runner;
     if (!r || !data || w == 0 || h == 0 || suppressVideo) return;   // a repeated picture (CAN_DUPE): the last one stays
+    // an OpenGL core's picture: read back from its framebuffer, then on as an XRGB8888 one
+    retro_pixel_format pixFmt = veyamux::retro::pixFmt;
+    if (data == RETRO_HW_FRAME_BUFFER_VALID) {
+        if (!gl::read(int(w), int(h), hwCb.bottom_left_origin, hwPixels)) return;
+        data = hwPixels.data();
+        pitch = size_t(w) * 4;
+        pixFmt = RETRO_PIXEL_FORMAT_XRGB8888;
+    }
     const bool turned = rotation == 1 || rotation == 3;
     const int dw0 = int(turned ? h : w), dh0 = int(turned ? w : h);
     float aspect = geometry.aspect_ratio > 0 ? geometry.aspect_ratio : float(w) / float(h);
@@ -482,6 +507,8 @@ void coreThread(Runner* r, Game g) {
     options.clear();
     memDescs.clear();
     memMap = {};
+    hwWanted = false;
+    hwCb = {};
     shutdownAsked = false;
     diskEject = nullptr; diskGetIndex = nullptr; diskSetIndex = nullptr; diskCount = nullptr; diskInsertIn = 0;
     disksNow = 0; diskNow = 0;
@@ -544,6 +571,18 @@ void coreThread(Runner* r, Game g) {
     core.getAvInfo(&av);
     geometry = av.geometry;
     fpsNow = av.timing.fps > 1 ? av.timing.fps : 60;
+    if (hwWanted) {
+        // the OpenGL context and the framebuffer, as large as the core's largest picture, then the core sets up its own
+        std::string ge;
+        const int mw = int(std::max({av.geometry.max_width, av.geometry.base_width, 640u}));
+        const int mh = int(std::max({av.geometry.max_height, av.geometry.base_height, 480u}));
+        if (!gl::create(hwCb, mw, mh, ge)) {
+            core.unloadGame(); core.deinit(); core.unload();
+            fail("This emulator needs OpenGL: " + ge);
+            return;
+        }
+        if (hwCb.context_reset) hwCb.context_reset();
+    }
     {
         std::lock_guard l(r->audioM);
         r->srcRate = av.timing.sample_rate > 1000 ? av.timing.sample_rate : 48000;
@@ -618,7 +657,7 @@ void coreThread(Runner* r, Game g) {
     rewindWanted = g.rewind;
     std::deque<std::vector<uint8_t>> rewindBuf;
     uint64_t frameNo = 0;
-    bool runAheadBroken = false;
+    bool runAheadBroken = hwWanted;   // (OpenGL cores: no run-ahead - their states are heavy and the GPU work doubles)
     auto frame = [&] {
         ++frameNo;
         latchInput();
@@ -701,9 +740,11 @@ void coreThread(Runner* r, Game g) {
     }
     r->running = false;
     cheevos::stop();
+    if (hwWanted && hwCb.context_destroy) hwCb.context_destroy();
     core.unloadGame();
     core.deinit();
     core.unload();
+    if (hwWanted) gl::destroy();
     if (!tmpFile.empty()) { std::error_code ec; fs::remove(tmpFile, ec); }
     // commands that came too late
     std::lock_guard l(r->cmdM);

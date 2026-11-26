@@ -147,7 +147,7 @@ target_compile_definitions(veyamux_rcheevos PUBLIC RC_CLIENT_SUPPORTS_HASH RC_DI
 set_target_properties(veyamux_rcheevos PROPERTIES POSITION_INDEPENDENT_CODE ON C_STANDARD 99)
 target_compile_options(veyamux_rcheevos PRIVATE -w)
 find_package(CURL REQUIRED)
-add_library(veyamux_media STATIC src/MediaEngine.cpp src/CaptureSource.cpp src/DemoSource.cpp src/RemotePlay.cpp src/Libretro.cpp src/RetroRemote.cpp src/Achievements.cpp src/Subtitles.cpp src/ContentProbe.cpp src/Recorder.cpp src/ScreenCast.cpp src/PulseDevices.cpp src/AudioMeter.cpp)
+add_library(veyamux_media STATIC src/MediaEngine.cpp src/CaptureSource.cpp src/DemoSource.cpp src/RemotePlay.cpp src/Libretro.cpp src/RetroRemote.cpp src/Achievements.cpp src/RetroGl.cpp src/Subtitles.cpp src/ContentProbe.cpp src/Recorder.cpp src/ScreenCast.cpp src/PulseDevices.cpp src/AudioMeter.cpp)
 target_include_directories(veyamux_media PUBLIC src)
 # PipeWire (window/screen source): headers only, libpipewire-0.3 is loaded from the system at run time
 pkg_check_modules(PIPEWIRE REQUIRED libpipewire-0.3)

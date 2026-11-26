@@ -1902,6 +1902,7 @@ QString PlayerBridge::translateMessage(const QString& msg) const {
         // RetroAchievements (Achievements.cpp)
         "Achievement unlocked: ", "All achievements in this game unlocked", "Achievements unlocked so far: ",
         "RetroAchievements sign-in failed: sign in again on the Games page",
+        "This emulator needs OpenGL: ",
     };
     for (const char* en : prefixes) {
         const QString e = QString::fromUtf8(en);
