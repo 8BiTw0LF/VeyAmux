@@ -5,6 +5,8 @@ import json, os, sys, re
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 VIDEO = sys.argv[1]; POSTER = sys.argv[2]
+# MOCK_MANY=<n>: Plex's film library has n films more, and each poster takes 50 ms (a large library on a slow server)
+MANY = int(os.environ.get("MOCK_MANY", "0"))
 TOKEN = "jf-secret-token"; PLEX = "plex-secret-token"
 log = sys.stderr
 def item(i, name, typ, **kw):
@@ -72,10 +74,14 @@ class H(BaseHTTPRequestHandler):
         if p == "/library/sections/1/genre":
             return self.send(200, {"MediaContainer": {"Directory": [{"key": "5", "title": "Action", "fastKey": "/library/sections/1/all?genre=5"}]}})
         if p in ("/library/sections/1/all", "/library/sections/1/recentlyAdded", "/library/sections/1/unwatched"):
+            extra = [{"ratingKey": str(1000 + n), "key": f"/library/metadata/{1000 + n}", "type": "movie", "title": f"Film {n}", "year": 2000 + n % 25,
+                      "duration": 6000000, "thumb": f"/library/metadata/{1000 + n}/thumb/1"} for n in range(MANY)]
             return self.send(200, {"MediaContainer": {"Metadata": [{"ratingKey": "77", "key": "/library/metadata/77", "type": "movie", "title": "Plex Movie",
-                "year": 2023, "duration": 3000, "viewOffset": 1500, "thumb": "/library/metadata/77/thumb/1", "Media": [{"Part": [{"key": "/library/parts/9/file.mp4"}]}]}]}})
+                "year": 2023, "duration": 3000, "viewOffset": 1500, "thumb": "/library/metadata/77/thumb/1", "Media": [{"Part": [{"key": "/library/parts/9/file.mp4"}]}]}] + extra}})
         if p == "/library/onDeck": return self.send(200, {"MediaContainer": {"Metadata": []}})
-        if p == "/photo/:/transcode": return self.file(POSTER, "image/png")
+        if p == "/photo/:/transcode":
+            if MANY: __import__("time").sleep(0.05)
+            return self.file(POSTER, "image/png")
         if p == "/library/parts/9/file.mp4": return self.file(VIDEO, "video/mp4")
         if p in ("/:/timeline", "/:/scrobble"): return self.send(200)
         return self.send(404)

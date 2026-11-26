@@ -51,7 +51,7 @@ MediaLibrary::MediaLibrary(PlayerBridge* player, QObject* parent) : QObject(pare
     levels_ = {{QString(), "root", QString(), QString()}};
     imagesChanged_.setSingleShot(true);
     imagesChanged_.setInterval(150);
-    connect(&imagesChanged_, &QTimer::timeout, this, [this] { emit imagesChanged(); });
+    connect(&imagesChanged_, &QTimer::timeout, this, [this] { ++imageVersion_; emit imagesChanged(); });
     loginPoll_.setInterval(2000);
     // where the video is, every 10 s (the server's "continue watching"; local files: the settings)
     progress_.setInterval(10000);
@@ -181,6 +181,7 @@ void MediaLibrary::setItems(QVariantList items, int gen) {
 void MediaLibrary::list() {
     ++gen_;
     imageQueue_.clear();
+    imageWaiting_.clear();
     items_.clear();
     images_.clear();
     emit itemsChanged();
@@ -299,12 +300,25 @@ void MediaLibrary::loadImage(int gen, const QString& key, const Source& s, const
         imagesChanged_.start();
         return;
     }
-    imageQueue_.append({gen, key, s, path, file});
+    imageWaiting_.insert(key, {gen, key, s, path, file});
+    // the first screenful is wanted at once (the page asks too, once laid out, but this saves the wait)
+    if (imageWaiting_.size() + images_.size() <= 40) want(key);
+}
+
+void MediaLibrary::want(const QString& key) {
+    auto it = imageWaiting_.find(key);
+    if (it == imageWaiting_.end()) return;
+    imageQueue_.prepend(*it);   // the newest on screen first: scrolling fast does not wait for what was passed
+    if (imageQueue_.size() > 120) {   // scrolled past long ago: waits again until it is on screen
+        const ImageJob old = imageQueue_.takeLast();
+        imageWaiting_.insert(old.key, old);
+    }
+    imageWaiting_.erase(it);
     pumpImages();
 }
 
 void MediaLibrary::pumpImages() {
-    while (imagesRunning_ < 4 && !imageQueue_.isEmpty()) {
+    while (imagesRunning_ < 6 && !imageQueue_.isEmpty()) {
         const ImageJob j = imageQueue_.takeFirst();
         if (j.gen != gen_) continue;
         ++imagesRunning_;

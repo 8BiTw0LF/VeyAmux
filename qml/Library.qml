@@ -213,6 +213,22 @@ Item {
 
     // ------------------------------------------------------------- the grid
     readonly property var items: isMedia ? media.items : games.items
+    // Media: the posters of the cards on screen (and a little beyond) are fetched, once the grid has settled; the rest
+    // wait until they are scrolled to
+    Timer {
+        id: wantTimer; interval: 120
+        onTriggered: {
+            if (!lib.isMedia || !lib.visible) return
+            const top = grid.contentY - 400, bottom = grid.contentY + grid.height + 400
+            for (let i = flow.children.length - 1; i >= 0; --i) {
+                const c = flow.children[i]
+                if (c.modelData && c.y + c.height > top && c.y < bottom) media.want(c.modelData.key)
+            }
+        }
+    }
+    Connections { target: grid; function onContentYChanged() { wantTimer.restart() } function onHeightChanged() { wantTimer.restart() } }
+    Connections { target: flow; function onHeightChanged() { wantTimer.restart() } }
+    Connections { target: media; function onItemsChanged() { wantTimer.restart() } }
     Flickable {
         id: grid
         anchors { left: side.right; right: parent.right; top: header.bottom; bottom: parent.bottom; leftMargin: 18 * lib.k; rightMargin: 18 * lib.k; topMargin: 14 * lib.k }
@@ -243,7 +259,7 @@ Item {
                         Image {
                             id: img
                             anchors.fill: parent
-                            source: (lib.isMedia ? media.images[card.modelData.key] : undefined) || card.modelData.image || ""
+                            source: (lib.isMedia && media.imageVersion >= 0 ? media.image(card.modelData.key) : "") || card.modelData.image || ""
                             fillMode: lib.isMedia ? Image.PreserveAspectCrop : Image.PreserveAspectFit
                             asynchronous: true; cache: true
                             sourceSize: Qt.size(card.picW * 1.5, card.picH * 1.5)
@@ -345,7 +361,7 @@ Item {
                     readonly property bool wide: detail.item && detail.item.shape === "wide"
                     width: (wide ? 300 : 200) * lib.k; height: (wide ? 169 : 290) * lib.k; radius: 10 * Theme.round
                     color: Theme.surface; clip: true
-                    Image { anchors.fill: parent; source: !detail.item ? "" : (lib.isMedia ? media.images[detail.item.key] : undefined) || detail.item.image || ""
+                    Image { anchors.fill: parent; source: !detail.item ? "" : (lib.isMedia && media.imageVersion >= 0 ? media.image(detail.item.key) : "") || detail.item.image || ""
                         fillMode: lib.isMedia ? Image.PreserveAspectCrop : Image.PreserveAspectFit; asynchronous: true }
                 }
                 Column {

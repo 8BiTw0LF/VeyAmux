@@ -33,6 +33,7 @@
 #include <QStandardPaths>
 #include <QFile>
 #include <QTimer>
+#include <QElapsedTimer>
 #include <QSettings>
 #include <QVulkanInstance>
 #include <QScreen>
@@ -592,7 +593,7 @@ int main(int argc, char** argv) {
             for (const auto& v : media.items()) {
                 const auto m = v.toMap();
                 qInfo("TEST   %s | %s | %s | %s", qPrintable(m.value("kind").toString()), qPrintable(m.value("title").toString()),
-                      qPrintable(m.value("sub").toString()), qPrintable(media.images().value(m.value("key").toString()).toString().section('/', -1)));
+                      qPrintable(m.value("sub").toString()), qPrintable(media.image(m.value("key").toString()).section('/', -1)));
             }
         };
         const QString url = tm.section(':', 1);
@@ -610,13 +611,15 @@ int main(int argc, char** argv) {
         QTimer::singleShot(2500, [&media, dump] { dump("root"); media.openItem(1); });
         QTimer::singleShot(3500, [&media, dump] { dump("library"); media.openItem(3); });
         QTimer::singleShot(5000, [&media, dump] { dump("genres"); media.openItem(0); });
-        QTimer::singleShot(6500, [&media, dump] { dump("genre"); media.play(0, false); });
-        QTimer::singleShot(9000, [&media, &player] {
+        // (VEYAMUX_TEST_MEDIA_STAY=<s>: stay on the list that long first, as someone looking through it)
+        const int stay = qEnvironmentVariableIntValue("VEYAMUX_TEST_MEDIA_STAY") * 1000;
+        QTimer::singleShot(6500 + stay, [&media, dump] { dump("genre"); media.play(0, false); });
+        QTimer::singleShot(9000 + stay, [&media, &player] {
             qInfo("TEST playing: hasMedia %d position %.2f fromLibrary %d title %s", player.hasMedia(), player.position(),
                   media.playingFromLibrary(), qPrintable(player.title()));
             media.stopPlayback();
         });
-        QTimer::singleShot(10500, [dump] { dump("after"); QCoreApplication::quit(); });
+        QTimer::singleShot(10500 + stay, [dump] { dump("after"); QCoreApplication::quit(); });
     }
     // Test hook: start a game from the Games page (VEYAMUX_TEST_GAME=<the game's file>)
     if (const QString tg = qEnvironmentVariable("VEYAMUX_TEST_GAME"); !tg.isEmpty())
@@ -629,6 +632,18 @@ int main(int argc, char** argv) {
             qInfo("TEST audio: track %d, at %.2f s (was %.2f), %lld tracks, %lld subtitle tracks", player.audioTrack(), player.position(), before,
                   qlonglong(player.audioTracks().size()), qlonglong(player.subtitleTracks().size()));
         });
+    // (VEYAMUX_TEST_LAG=1: the longest the UI thread was busy, every 2 s - the controller waits that long)
+    if (qEnvironmentVariableIsSet("VEYAMUX_TEST_LAG")) {
+        auto* lagT = new QTimer(&app);
+        auto last = std::make_shared<QElapsedTimer>(), win = std::make_shared<QElapsedTimer>();
+        auto worst = std::make_shared<qint64>(0);
+        last->start(); win->start();
+        QObject::connect(lagT, &QTimer::timeout, [last, win, worst] {
+            *worst = std::max(*worst, last->restart() - 20);
+            if (win->elapsed() >= 2000) { qInfo("TEST lag: %lld ms", qlonglong(*worst)); *worst = 0; win->restart(); }
+        });
+        lagT->start(20);
+    }
     // (VEYAMUX_TEST_ARTWORK=<folder>: write the Steam library artwork there and quit)
     if (const QString ta = qEnvironmentVariable("VEYAMUX_TEST_ARTWORK"); !ta.isEmpty()) {
         const auto art = veyamux::steam::artwork();

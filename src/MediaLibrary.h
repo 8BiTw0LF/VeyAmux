@@ -30,7 +30,9 @@ class MediaLibrary : public QObject {
     Q_PROPERTY(QString current READ current NOTIFY viewChanged)
     Q_PROPERTY(QVariantList crumbs READ crumbs NOTIFY viewChanged)        // titles below the source
     Q_PROPERTY(QVariantList items READ items NOTIFY itemsChanged)
-    Q_PROPERTY(QVariantMap images READ images NOTIFY imagesChanged)      // item key -> its poster (file URL), as they arrive
+    // the posters as they arrive: image(key) after a change of imageVersion (one lookup per card; a map handed to QML
+    // was copied whole for every card on every change, which froze the page with large libraries)
+    Q_PROPERTY(int imageVersion READ imageVersion NOTIFY imagesChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
     // signing in: {kind: "quick" | "plex", code, url} while a code waits to be confirmed, else empty
     Q_PROPERTY(QVariantMap login READ login NOTIFY loginChanged)
@@ -43,7 +45,10 @@ public:
     QString current() const { return current_; }
     QVariantList crumbs() const;
     QVariantList items() const { return items_; }
-    QVariantMap images() const { return images_; }
+    int imageVersion() const { return imageVersion_; }
+    Q_INVOKABLE QString image(const QString& key) const { return images_.value(key); }
+    // a card came on screen: its poster is fetched next (the ones out of sight wait until they are scrolled to)
+    Q_INVOKABLE void want(const QString& key);
     bool busy() const { return pending_ > 0; }
     QVariantMap login() const { return login_; }
     bool playingFromLibrary() const { return !playing_.source.isEmpty(); }
@@ -108,14 +113,16 @@ private:
     QString current_;
     QList<Level> levels_;
     QVariantList items_;
-    QVariantMap images_;
+    QHash<QString, QString> images_;
+    int imageVersion_ = 0;
     int gen_ = 0;                    // listing generation: late answers for an old listing are dropped
     int pending_ = 0;
     QVariantMap login_;
     QTimer loginPoll_;
     QHash<QString, QString> plexUri_;   // server -> the connection that answered
     struct ImageJob { int gen; QString key; Source src; QString path, file; };
-    QList<ImageJob> imageQueue_;
+    QList<ImageJob> imageQueue_;                 // wanted (on screen), the last wanted first
+    QHash<QString, ImageJob> imageWaiting_;      // not on screen yet
     int imagesRunning_ = 0;
     QTimer imagesChanged_;
     Playing playing_;
