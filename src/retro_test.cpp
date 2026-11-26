@@ -1,9 +1,10 @@
 // VeyAmux for Linux: test of the libretro frontend (Libretro.h) with a core.
-//   veyamux-retro-test <core.so> <game file>
+//   veyamux-retro-test <core.so> <game file> [crash_core.so]
 // Runs the game for a second: pictures arrive at the core's rate in the expected size, sound comes out, a state can
 // be saved and loaded, and a zipped copy of the game loads too. Exit code 0 when all of it worked.
 #include "Libretro.h"
 #include "CaptureSource.h"
+#include "RetroRemote.h"
 
 #include <archive.h>
 #include <archive_entry.h>
@@ -138,6 +139,7 @@ static bool runOnce(const std::string& core, const std::string& rom, const fs::p
 }
 
 int main(int argc, char** argv) {
+    if (argc >= 2 && std::strcmp(argv[1], "--retro-host") == 0) return retro::hostMain();   // the child (second half)
     if (argc < 3) { std::fprintf(stderr, "usage: %s <core.so> <game>\n", argv[0]); return 2; }
     const fs::path dir = fs::temp_directory_path() / "veyamux-retro-test";
     fs::remove_all(dir);
@@ -160,6 +162,37 @@ int main(int argc, char** argv) {
     const std::string sz = (dir / "game.7z").string();
     check(write7z(sz, fs::path(argv[2]).filename().string(), data) && retro::zipList(sz).size() == 1, "7z: the list");
     check(runOnce(argv[1], sz, dir, false), "the game in a 7z file runs");
+    // the same in a child process (as VeyAmux runs games): everything again, and an emulator that crashes stops its
+    // own process only
+    std::printf("     -- in a child process\n");
+    retro::useHostProcess(fs::read_symlink("/proc/self/exe").string());
+    fs::remove_all(dir);
+    fs::create_directories(dir);
+    runOnce(argv[1], argv[2], dir, true);
+    if (argc >= 4) {
+        retro::Game g;
+        g.core = argv[3]; g.rom = (dir / "x.crash").string(); g.title = "crash";
+        std::ofstream(g.rom) << "x";
+        g.systemDir = g.saveDir = g.stateDir = dir.string();
+        retro::setGame(g);
+        retro::Stream s;
+        std::string e;
+        check(s.open(e), "the crashing emulator starts");
+        RawFrame f;
+        int frames = 0;
+        retro::Stream::Result r = retro::Stream::Result::Timeout;
+        const auto t0 = std::chrono::steady_clock::now();
+        while (std::chrono::steady_clock::now() - t0 < std::chrono::seconds(5)) {
+            r = s.readLatest(f, 100, e);
+            if (r == retro::Stream::Result::Frame) ++frames;
+            if (r == retro::Stream::Result::Error) break;
+        }
+        std::printf("     %d pictures, then: %s\n", frames, e.c_str());
+        check(frames > 10 && r == retro::Stream::Result::Error && e == "The emulator crashed", "a crash ends the game, not this process");
+        s.close();
+        // and a game after it runs
+        check(runOnce(argv[1], argv[2], dir, false), "the next game runs after a crash");
+    }
     fs::remove_all(dir);
     std::printf(failures ? "%d FAILED\n" : "all ok\n", failures);
     return failures ? 1 : 0;

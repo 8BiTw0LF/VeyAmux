@@ -38,6 +38,8 @@
 #include <QVulkanInstance>
 #include <QScreen>
 #include <memory>
+#include <filesystem>
+#include "RetroRemote.h"
 #include <QObject>
 #include <thread>
 #include <chrono>
@@ -122,6 +124,8 @@ static UiChoice chooseUi(const QStringList& args, bool probing) {
 }
 
 int main(int argc, char** argv) {
+    // a game's emulator, started by VeyAmux in a process of its own (RetroRemote.h): no window, no Qt
+    if (argc >= 2 && std::strcmp(argv[1], "--retro-host") == 0) return veyamux::retro::hostMain();
     if (!qEnvironmentVariableIsSet("QSG_RENDER_LOOP")) qputenv("QSG_RENDER_LOOP", "threaded");
     // Grey (not sub-pixel/LCD) text antialiasing: sub-pixel text gets coloured fringes when the window is scaled by the
     // compositor, drawn through a layer (HDR output) or captured.
@@ -154,6 +158,16 @@ int main(int argc, char** argv) {
                 qputenv(k.toLatin1().constData(), q.value(k).toString().toLatin1());
                 qInfo("Debug switch: %s=%s", qPrintable(k), qPrintable(q.value(k).toString()));
             }
+    }
+    // games run in a child process, so an emulator that crashes does not take VeyAmux with it
+    // (VEYAMUX_RETRO_INPROC=1: in this process, as before 2.1.2)
+    if (!qEnvironmentVariableIsSet("VEYAMUX_RETRO_INPROC")) {
+        std::error_code ec;
+        const auto exe = std::filesystem::read_symlink("/proc/self/exe", ec);
+        if (!ec) {
+            veyamux::retro::useHostProcess(exe.string());
+            veyamux::retro::setHostLog([](const std::string& line) { qInfo("%s", line.c_str()); });
+        }
     }
     // The program was called Veyra before: carry the old settings over once (the old folder is left untouched).
     {

@@ -1,6 +1,7 @@
 // VeyAmux for Linux: a minimal libretro frontend. See Libretro.h.
 #include "Libretro.h"
 #include "CaptureSource.h"   // RawFrame
+#include "RetroRemote.h"     // the same, in a child process (VeyAmux), forwarded from the functions below
 
 #include "../third_party/libretro/libretro.h"
 
@@ -707,23 +708,29 @@ std::string statePathFor(int slot) {
 
 // ------------------------------------------------------------------ public
 
-void setGame(const Game& g) { std::lock_guard l(gameM); current = g; stickDpad = g.stickAsDpad; }
+void setGame(const Game& g) {
+    if (remote::on()) remote::setGame(g);
+    std::lock_guard l(gameM);
+    current = g;
+    stickDpad = g.stickAsDpad;
+}
 Game game() { std::lock_guard l(gameM); return current; }
 
 void setPad(int port, uint32_t buttons, double lx, double ly, double rx, double ry) {
     if (port < 0 || port > 3) return;
-    padButtons[port] = buttons;
     auto ax = [](double v) { return int16_t(std::clamp(std::lround(v * 32767.0), -32768L, 32767L)); };
+    if (remote::on()) { const int16_t a[4] = {ax(lx), ax(ly), ax(rx), ax(ry)}; remote::setPad(port, buttons, a); return; }
+    padButtons[port] = buttons;
     axes[port][0] = ax(lx); axes[port][1] = ax(ly); axes[port][2] = ax(rx); axes[port][3] = ax(ry);
 }
 void setPad(uint32_t buttons, double lx, double ly, double rx, double ry) { setPad(0, buttons, lx, ly, rx, ry); }
-void setRunAhead(int frames) { runAheadWanted = std::clamp(frames, 0, 2); }
-void setRewind(bool on) { rewindWanted = on; }
-void setRewinding(bool held) { rewindHeld = held; }
+void setRunAhead(int frames) { if (remote::on()) remote::setRunAhead(std::clamp(frames, 0, 2)); else runAheadWanted = std::clamp(frames, 0, 2); }
+void setRewind(bool on) { if (remote::on()) remote::setRewind(on); else rewindWanted = on; }
+void setRewinding(bool held) { if (remote::on()) remote::setRewinding(held); else rewindHeld = held; }
 std::string autoStatePath(const std::string& stateDir, const std::string& rom) {
     return (fs::path(stateDir) / (baseName(rom) + ".auto.state")).string();
 }
-void setKeys(uint32_t buttons) { keyButtons = buttons; }
+void setKeys(uint32_t buttons) { if (remote::on()) remote::setKeys(buttons); else keyButtons = buttons; }
 
 uint32_t fromPlayStation(uint32_t ps, double l2, double r2) {
     // remoteplay::Button: Cross 0, Circle 1, Square 2, Triangle 3, Left 4, Right 5, Up 6, Down 7, L1 8, R1 9, L3 10,
@@ -740,9 +747,14 @@ uint32_t fromPlayStation(uint32_t ps, double l2, double r2) {
     return b;
 }
 
-void setRumbleCallback(std::function<void(int, int)> cb) { std::lock_guard l(rumbleM); rumbleCb = std::move(cb); }
+void setRumbleCallback(std::function<void(int, int)> cb) {
+    if (remote::on()) { remote::setRumbleCallback(std::move(cb)); return; }
+    std::lock_guard l(rumbleM);
+    rumbleCb = std::move(cb);
+}
 
 void audio(int16_t* out, int frames) {
+    if (remote::on()) { remote::audio(out, frames); return; }
     auto r = get();
     if (!r) { std::memset(out, 0, size_t(frames) * 4); std::this_thread::sleep_for(std::chrono::milliseconds(frames / 48)); return; }
     // paced by the playback stream: wait until the core has made enough sound for this block, then resample. The
@@ -782,9 +794,10 @@ void audio(int16_t* out, int frames) {
     r->resamplePos = pos - double(used);
 }
 
-bool running() { auto r = get(); return r && r->running.load(); }
+bool running() { if (remote::on()) return remote::running(); auto r = get(); return r && r->running.load(); }
 
 void saveState(int slot) {
+    if (remote::on()) { remote::command("save " + std::to_string(slot)); return; }
     const std::string path = statePathFor(slot);
     post([path] {
         auto size = reinterpret_cast<size_t (*)()>(coreSym("retro_serialize_size"));
@@ -798,6 +811,7 @@ void saveState(int slot) {
 }
 
 void loadState(int slot) {
+    if (remote::on()) { remote::command("load " + std::to_string(slot)); return; }
     const std::string path = statePathFor(slot);
     post([path] {
         auto unser = reinterpret_cast<bool (*)(const void*, size_t)>(coreSym("retro_unserialize"));
@@ -810,12 +824,13 @@ void loadState(int slot) {
 
 bool hasState(int slot) { std::error_code ec; return fs::exists(statePathFor(slot), ec); }
 
-int discCount() { return disksNow.load(); }
-int discIndex() { return diskNow.load(); }
+int discCount() { return remote::on() ? remote::discCount() : disksNow.load(); }
+int discIndex() { return remote::on() ? remote::discIndex() : diskNow.load(); }
 
 // the next disc: the tray opens, the disc is changed, and a second later it closes (the game sees the lid open and
 // shut, as on the console)
 void nextDisc() {
+    if (remote::on()) { remote::command("disc"); return; }
     post([] {
         if (!diskCount || !diskSetIndex || !diskEject || diskCount() < 2) return;
         const unsigned n = diskCount(), i = diskGetIndex ? diskGetIndex() : 0;
@@ -828,14 +843,27 @@ void nextDisc() {
 }
 
 void reset() {
+    if (remote::on()) { remote::command("reset"); return; }
     post([] { if (auto f = reinterpret_cast<void (*)()>(coreSym("retro_reset"))) f(); });
 }
 
-void setPaused(bool p) { if (auto r = get()) r->paused = p; }
+void setPaused(bool p) { if (remote::on()) remote::setPaused(p); else if (auto r = get()) r->paused = p; }
 
-std::string takeMessage() { std::lock_guard l(msgM); std::string m; m.swap(message); return m; }
+std::string takeMessage() {
+    if (remote::on()) return remote::takeMessage();
+    std::lock_guard l(msgM);
+    std::string m;
+    m.swap(message);
+    return m;
+}
 
 Info info() {
+    if (remote::on()) {
+        const auto o = remote::info();
+        Info i;
+        i.core = o.core; i.fps = o.fps; i.sampleRate = o.sampleRate; i.w = o.w; i.h = o.h; i.aspect = o.aspect;
+        return i;
+    }
     auto r = get();
     if (!r) return {};
     std::lock_guard i(r->infoM);
@@ -865,6 +893,13 @@ Stream::~Stream() { close(); }
 
 bool Stream::open(std::string& error) {
     close();
+    if (remote::on()) {
+        if (game().core.empty()) { error = "No game chosen"; return false; }
+        if (!remote::open(error)) return false;
+        open_ = true;
+        seen_ = 0;
+        return true;
+    }
     Game g = game();
     if (g.core.empty() || g.rom.empty()) { error = "No game chosen"; return false; }
     {
@@ -902,6 +937,7 @@ bool Stream::open(std::string& error) {
 void Stream::close() {
     if (!open_) return;
     open_ = false;
+    if (remote::on()) { remote::close(); return; }
     auto r = get();
     if (!r) return;
     r->quit = true;
@@ -918,6 +954,11 @@ void Stream::close() {
 }
 
 Stream::Result Stream::readLatest(RawFrame& out, int timeoutMs, std::string& error) {
+    if (remote::on()) {
+        if (!open_) { error = "The game is not running"; return Result::Error; }
+        const auto res = remote::readLatest(out, seen_, timeoutMs, error);
+        return res == remote::Read::Frame ? Result::Frame : res == remote::Read::Timeout ? Result::Timeout : Result::Error;
+    }
     auto r = get();
     if (!open_ || !r) { error = "The game is not running"; return Result::Error; }
     std::unique_lock l(r->frameM);
@@ -940,12 +981,14 @@ Stream::Result Stream::readLatest(RawFrame& out, int timeoutMs, std::string& err
 double Stream::fps() const { return info().fps; }
 int Stream::width() const {
     // the first picture decides; before it, the core's base size scaled the same way
+    if (remote::on()) return remote::width();
     auto r = get();
     if (!r) return 0;
     std::lock_guard f(r->frameM);
     return r->fw > 0 ? r->fw : 1280;
 }
 int Stream::height() const {
+    if (remote::on()) return remote::height();
     auto r = get();
     if (!r) return 0;
     std::lock_guard f(r->frameM);
