@@ -25,6 +25,7 @@ void PlayerBridge::openGame(const QString& core, const QString& rom, const QStri
     g.stateDir = (data + "states/" + systemId).toStdString();
     g.stickAsDpad = !sys || !sys->analog;
     retroSystem_ = systemId;
+    retroCoreRunning_ = QFileInfo(core).fileName().remove("_libretro.so");
     retroRewindKey_ = g.stickAsDpad;   // L2 is free on systems without analog sticks
     retroRewinding_ = false;
     g.runAhead = retroRunAhead();
@@ -96,6 +97,20 @@ void PlayerBridge::setRetroRewind(bool on) {
     QSettings().setValue("games/" + retroSystem_ + "/rewind", on);
     veyamux::retro::setRewind(on);
     if (!on) { veyamux::retro::setRewinding(false); retroRewinding_ = false; }
+    emit retroOptionsChanged();
+}
+QStringList PlayerBridge::retroCores() const {
+    const veyamux::GameSystem* s = veyamux::gameSystem(retroSystem_);
+    return s ? QString::fromLatin1(s->cores).split(',') : QStringList();
+}
+// games/<system>/core: GameLibrary::coreFor tries it first
+QString PlayerBridge::retroCore() const {
+    const QString c = QSettings().value("games/" + retroSystem_ + "/core").toString();
+    return retroCores().contains(c) ? c : retroCoreRunning_;
+}
+void PlayerBridge::setRetroCore(const QString& core) {
+    if (!retroCores().contains(core)) return;
+    QSettings().setValue("games/" + retroSystem_ + "/core", core);
     emit retroOptionsChanged();
 }
 void PlayerBridge::retroRewindHold(bool held) { if (retroActive() && retroRewind()) veyamux::retro::setRewinding(held); }

@@ -147,6 +147,18 @@ Rectangle {
             onClicked: player.retroRewind = !player.retroRewind }
         Text { visible: player.retroActive; width: parent.width; wrapMode: Text.Wrap; font.family: Theme.font; color: Theme.dim; font.pixelSize: 12
             text: tr("runAheadHint") + " " + (player.retroRewindOnL2 ? tr("rewindHintL2") : tr("rewindHintKey")) }
+        // the emulator for this system (from the next start), when it has more than one
+        Item { visible: player.retroActive && player.retroCores.length > 1; width: parent.width; height: 1 }
+        Text { visible: player.retroActive && player.retroCores.length > 1; height: 38; verticalAlignment: Text.AlignVCenter; font.family: Theme.font
+            text: tr("gameEmulator"); color: Theme.label; font.pixelSize: 14 }
+        Repeater {
+            model: player.retroActive && player.retroCores.length > 1 ? player.retroCores : []
+            delegate: Btn { required property string modelData; text: modelData.replace(/_/g, " ")
+                opacity: player.retroCore === modelData ? 1 : 0.6; onClicked: player.retroCore = modelData }
+        }
+        Text { visible: player.retroActive && player.retroCores.length > 1 && player.retroCore !== player.retroCoreRunning
+            width: parent.width; wrapMode: Text.Wrap; font.family: Theme.font; color: Theme.dim; font.pixelSize: 12
+            text: tr("gameEmulatorNext") }
         Item { visible: player.retroActive; width: parent.width; height: 1 }
         Btn { visible: player.retroActive && player.retroDiscs > 1; primary: true
             text: tr("gameDisc").replace("%1", player.retroDisc % player.retroDiscs + 1).replace("%2", player.retroDiscs)

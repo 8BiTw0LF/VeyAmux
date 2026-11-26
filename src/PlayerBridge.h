@@ -63,6 +63,10 @@ class PlayerBridge : public QObject {
     Q_PROPERTY(int retroRunAhead READ retroRunAhead WRITE setRetroRunAhead NOTIFY retroOptionsChanged)
     Q_PROPERTY(bool retroRewind READ retroRewind WRITE setRetroRewind NOTIFY retroOptionsChanged)
     Q_PROPERTY(bool retroRewindOnL2 READ retroRewindOnL2 NOTIFY retroOptionsChanged)
+    // the emulators this system can use (best first) and the one chosen for it (used from the next start)
+    Q_PROPERTY(QStringList retroCores READ retroCores NOTIFY retroOptionsChanged)
+    Q_PROPERTY(QString retroCore READ retroCore WRITE setRetroCore NOTIFY retroOptionsChanged)
+    Q_PROPERTY(QString retroCoreRunning READ retroCoreRunning NOTIFY retroOptionsChanged)
     Q_PROPERTY(int retroDisc READ retroDisc NOTIFY retroDiscChanged)    // the one in the tray (1 = the first)
     // subtitles (PlayerBridgeSubtitles.cpp): the tracks [{id, name, lang}], the one shown (-1 off), the line due now
     // (text, or a picture: its URL, its place on the video as fractions, the video's aspect)
@@ -249,6 +253,10 @@ public:
     bool retroRewind() const;
     void setRetroRewind(bool on);
     bool retroRewindOnL2() const { return retroRewindKey_; }
+    QStringList retroCores() const;
+    QString retroCore() const;
+    void setRetroCore(const QString& core);
+    QString retroCoreRunning() const { return retroCoreRunning_; }
     int retroDisc() const { return retroDisc_; }
     QVariantList subtitleTracks() const;
     QVariantList audioTracks() const;
@@ -745,7 +753,8 @@ private:
     int retroDiscs_ = 0, retroDisc_ = 0;
     QString retroSystem_;
     bool retroRewindKey_ = false;
-    bool retroRewinding_ = false;      // L2 held for rewind (with hysteresis)
+    bool retroRewinding_ = false;
+    QString retroCoreRunning_;         // the emulator of the game running (its file name without _libretro.so)      // L2 held for rewind (with hysteresis)
     double demoProgress_ = 0;
     int demoPose_ = 0;
     std::vector<veyamux::CaptureMode> lastModes_;

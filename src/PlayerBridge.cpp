@@ -1,4 +1,5 @@
 #include "PlayerBridge.h"
+#include "GameLibrary.h"
 #include <QPixmap>
 #include <QCursor>
 #include "Sandbox.h"
@@ -1156,6 +1157,11 @@ QStringList PlayerBridge::profiles() const {
 }
 
 QString PlayerBridge::signalKey() const {
+    // a game: its console is the "signal", so a profile bound while a SNES game runs is used for every SNES game
+    if (retroActive_) {
+        const veyamux::GameSystem* g = veyamux::gameSystem(retroSystem_);
+        return "Games: " + (g ? QString::fromUtf8(g->name) : retroSystem_);
+    }
     if (!engine_.isLive()) return {};
     const auto& i = engine_.info();
     return QString("%1x%2@%3 %4").arg(i.width).arg(i.height).arg(std::lround(i.fps)).arg(QString::fromStdString(i.videoCodec));

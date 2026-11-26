@@ -648,7 +648,12 @@ QString GameLibrary::coreFor(const QString& systemId, QString& error, bool downl
                               QDir::homePath() + "/.config/retroarch/cores",
                               QDir::homePath() + "/.local/share/Steam/steamapps/common/RetroArch/cores",
                               "/usr/lib64/libretro", "/usr/lib/libretro", "/usr/lib/x86_64-linux-gnu/libretro", "/usr/local/lib/libretro"};
-    const QStringList cores = QString::fromLatin1(s->cores).split(',');
+    QStringList cores = QString::fromLatin1(s->cores).split(',');
+    // the one chosen for this system in the menu goes first (games/<system>/core)
+    if (const QString chosen = QSettings().value("games/" + systemId + "/core").toString(); cores.contains(chosen)) {
+        cores.removeAll(chosen);
+        cores.prepend(chosen);
+    }
     for (const auto& c : cores)
         for (const auto& d : dirs) {
             const QString p = d + "/" + c + "_libretro.so";

@@ -577,6 +577,10 @@ void coreThread(Runner* r, Game g) {
     bool resumePending = g.resume;
     auto tryResume = [&] {
         std::vector<uint8_t> d;
+        // (written by another emulator - one chosen for the system since - it cannot be read: the game starts over)
+        std::vector<uint8_t> who;
+        const std::string coreName = std::filesystem::path(g.core).filename().string();
+        if (readFile(autoState + ".core", who) && std::string(who.begin(), who.end()) != coreName) { resumePending = false; return; }
         if (!readFile(autoState, d) || d.empty()) { resumePending = false; return; }
         if (core.unserialize(d.data(), d.size())) { resumePending = false; say("Continued where you left off"); }
     };
@@ -659,7 +663,11 @@ void coreThread(Runner* r, Game g) {
     // the automatic state for "Continue" (not when the game shut itself down)
     if (!shutdownAsked && frameNo > 30) {
         std::vector<uint8_t> st;
-        if (serialize(st)) writeFile(autoState, st.data(), st.size());
+        if (serialize(st)) {
+            writeFile(autoState, st.data(), st.size());
+            const std::string coreName = std::filesystem::path(g.core).filename().string();
+            writeFile(autoState + ".core", coreName.data(), coreName.size());
+        }
     }
     r->running = false;
     core.unloadGame();

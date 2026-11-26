@@ -8,6 +8,8 @@ var names = {"en": "English", "da": "Dansk", "de": "Deutsch", "es": "Español", 
 
 var strings = {
     en: {
+        "gameEmulator": "Emulator",
+        "gameEmulatorNext": "The chosen emulator is used for this console from the next game you start. Its saved states are its own.",
         "frame1": "1 frame",
         "gamesContinue": "Continue",
         "gamesStartOver": "Start over",
@@ -383,6 +385,8 @@ var strings = {
         "psManualRegister": "It can be registered even if it does not answer the search."
     },
     da: {
+        "gameEmulator": "Emulator",
+        "gameEmulatorNext": "Den valgte emulator bruges til denne konsol fra næste gang du starter et spil. Den har sine egne gemte tilstande.",
         "frame1": "1 billede",
         "gamesContinue": "Fortsæt",
         "gamesStartOver": "Start forfra",
@@ -758,6 +762,8 @@ var strings = {
         "psManualRegister": "Den kan registreres, selv om den ikke svarer på søgningen."
     },
     de: {
+        "gameEmulator": "Emulator",
+        "gameEmulatorNext": "Der gewählte Emulator wird für diese Konsole ab dem nächsten Spielstart verwendet. Er hat eigene Speicherstände.",
         "frame1": "1 Bild",
         "gamesContinue": "Fortsetzen",
         "gamesStartOver": "Neu starten",
@@ -1109,6 +1115,8 @@ var strings = {
         "psManualRegister": "Sie kann registriert werden, auch wenn sie auf die Suche nicht antwortet."
     },
     es: {
+        "gameEmulator": "Emulador",
+        "gameEmulatorNext": "El emulador elegido se usa para esta consola a partir del próximo juego que inicies. Sus estados guardados son propios.",
         "frame1": "1 fotograma",
         "gamesContinue": "Continuar",
         "gamesStartOver": "Empezar de nuevo",
@@ -1460,6 +1468,8 @@ var strings = {
         "psManualRegister": "Se puede registrar aunque no responda a la búsqueda."
     },
     fr: {
+        "gameEmulator": "Émulateur",
+        "gameEmulatorNext": "L'émulateur choisi sera utilisé pour cette console dès le prochain jeu lancé. Ses sauvegardes d'état lui sont propres.",
         "frame1": "1 image",
         "gamesContinue": "Continuer",
         "gamesStartOver": "Recommencer",
@@ -1811,6 +1821,8 @@ var strings = {
         "psManualRegister": "Elle peut être enregistrée même si elle ne répond pas à la recherche."
     },
     sv: {
+        "gameEmulator": "Emulator",
+        "gameEmulatorNext": "Den valda emulatorn används för den här konsolen från nästa spel du startar. Den har egna sparade lägen.",
         "frame1": "1 bild",
         "gamesContinue": "Fortsätt",
         "gamesStartOver": "Börja om",
@@ -2162,6 +2174,8 @@ var strings = {
         "psManualRegister": "Den kan registreras även om den inte svarar på sökningen."
     },
     nb: {
+        "gameEmulator": "Emulator",
+        "gameEmulatorNext": "Den valgte emulatoren brukes for denne konsollen fra neste spill du starter. Den har egne lagrede tilstander.",
         "frame1": "1 bilde",
         "gamesContinue": "Fortsett",
         "gamesStartOver": "Start på nytt",
@@ -2513,6 +2527,8 @@ var strings = {
         "psManualRegister": "Den kan registreres selv om den ikke svarer på søket."
     },
     ru: {
+        "gameEmulator": "Эмулятор",
+        "gameEmulatorNext": "Выбранный эмулятор будет использоваться для этой консоли со следующего запуска игры. У него свои сохранения.",
         "frame1": "1 кадр",
         "gamesContinue": "Продолжить",
         "gamesStartOver": "Начать заново",
