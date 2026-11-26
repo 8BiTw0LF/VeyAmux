@@ -2,6 +2,7 @@
 #include "PlayerBridge.h"
 #include "GameLibrary.h"
 #include "Libretro.h"
+#include "Achievements.h"
 #include "RemotePlay.h"
 #include <QFileInfo>
 #include <QHash>
@@ -31,6 +32,12 @@ void PlayerBridge::openGame(const QString& core, const QString& rom, const QStri
     g.runAhead = retroRunAhead();
     g.rewind = retroRewind();
     g.resume = resume;
+    {   // RetroAchievements, when signed in on the Games page
+        QSettings q;
+        g.raUser = q.value("games/ra/user").toString().toStdString();
+        g.raToken = q.value("games/ra/token").toString().toStdString();
+        g.raConsole = int(veyamux::retro::cheevos::consoleFor(systemId.toStdString()));
+    }
     emit retroOptionsChanged();
     emit playersReset();
     veyamux::retro::setGame(g);

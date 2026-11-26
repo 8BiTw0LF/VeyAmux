@@ -2,6 +2,7 @@
 #include "Libretro.h"
 #include "CaptureSource.h"   // RawFrame
 #include "RetroRemote.h"     // the same, in a child process (VeyAmux), forwarded from the functions below
+#include "Achievements.h"
 
 #include "../third_party/libretro/libretro.h"
 
@@ -161,7 +162,10 @@ retro_get_image_index_t diskGetIndex = nullptr;
 retro_set_image_index_t diskSetIndex = nullptr;
 retro_get_num_images_t diskCount = nullptr;
 int diskInsertIn = 0;            // frames until the tray closes again after a change
-std::atomic<int> disksNow{0}, diskNow{0};                // one source row as RGBA
+std::atomic<int> disksNow{0}, diskNow{0};
+// the core's memory map (SET_MEMORY_MAPS), kept for RetroAchievements
+std::vector<retro_memory_descriptor> memDescs;
+retro_memory_map memMap{};                // one source row as RGBA
 std::vector<int> xmap, ymap;
 
 // ------------------------------------------------------------------ core callbacks
@@ -221,7 +225,15 @@ bool RETRO_CALLCONV environment(unsigned cmd, void* data) {
         return true;
     }
     case RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS: case RETRO_ENVIRONMENT_SET_CONTROLLER_INFO:
-    case RETRO_ENVIRONMENT_SET_SUBSYSTEM_INFO: case RETRO_ENVIRONMENT_SET_MEMORY_MAPS:
+    case RETRO_ENVIRONMENT_SET_MEMORY_MAPS: {   // where the console's memory lies (RetroAchievements reads it)
+        const auto* mm = static_cast<const retro_memory_map*>(data);
+        if (!mm) return true;
+        memDescs.assign(mm->descriptors, mm->descriptors + mm->num_descriptors);
+        memMap.descriptors = memDescs.data();
+        memMap.num_descriptors = unsigned(memDescs.size());
+        return true;
+    }
+    case RETRO_ENVIRONMENT_SET_SUBSYSTEM_INFO:
     case RETRO_ENVIRONMENT_SET_SUPPORT_NO_GAME: case RETRO_ENVIRONMENT_SET_SUPPORT_ACHIEVEMENTS:
     case RETRO_ENVIRONMENT_SET_SERIALIZATION_QUIRKS: case RETRO_ENVIRONMENT_SET_CORE_OPTIONS_DISPLAY:
     case RETRO_ENVIRONMENT_SET_CONTENT_INFO_OVERRIDE: case RETRO_ENVIRONMENT_SET_MINIMUM_AUDIO_LATENCY:
@@ -468,6 +480,8 @@ void coreThread(Runner* r, Game g) {
     rotation = 0;
     geometry = {};
     options.clear();
+    memDescs.clear();
+    memMap = {};
     shutdownAsked = false;
     diskEject = nullptr; diskGetIndex = nullptr; diskSetIndex = nullptr; diskCount = nullptr; diskInsertIn = 0;
     disksNow = 0; diskNow = 0;
@@ -560,6 +574,20 @@ void coreThread(Runner* r, Game g) {
     };
     std::fprintf(stderr, "Games: %s runs %s (%.3f fps, %.0f Hz sound, %ux%u)\n", coreName.c_str(), g.rom.c_str(),
                  fpsNow, av.timing.sample_rate, av.geometry.base_width, av.geometry.base_height);
+    // RetroAchievements: identified by the game file (or its bytes when it came out of an archive)
+    if (!g.raToken.empty() && g.raConsole > 0) {
+        cheevos::Start cs;
+        cs.user = g.raUser;
+        cs.token = g.raToken;
+        cs.console = uint32_t(g.raConsole);
+        if (isArchive(g.rom) && !romData.empty()) { cs.data = romData.data(); cs.size = romData.size(); }
+        else cs.path = romPath;
+        cs.memoryMap = memMap.num_descriptors ? &memMap : nullptr;
+        cs.memoryData = [&core](unsigned id) { return core.getMemoryData(id); };
+        cs.memorySize = [&core](unsigned id) { return core.getMemorySize(id); };
+        cs.say = [](const std::string& m) { say(m); };
+        cheevos::start(cs);
+    }
     r->running = true;
     {
         std::lock_guard l(r->loadM);
@@ -619,13 +647,14 @@ void coreThread(Runner* r, Game g) {
             rewindBuf.clear();
         }
         const int ahead = runAheadBroken ? 0 : runAheadWanted.load();
-        if (ahead <= 0) { core.run(); return; }
+        if (ahead <= 0) { core.run(); cheevos::frame(); return; }
         // run-ahead: the real frame (its sound kept, its picture not), a state, the frames ahead (only the last one's
         // picture shown, no sound), and back to the state. The picture is then what the game shows `ahead` frames
         // after the input, so its own delay is gone.
         suppressVideo = true;
         core.run();
         suppressVideo = false;
+        cheevos::frame();   // (the real frame's memory, before the frames ahead)
         if (!serialize(state)) {
             runAheadBroken = true;
             say("Run-ahead does not work with this emulator");
@@ -648,7 +677,7 @@ void coreThread(Runner* r, Game g) {
         std::vector<std::function<void()>> cmds;
         { std::lock_guard l(r->cmdM); cmds.swap(r->cmds); }
         for (auto& c : cmds) c();
-        if (r->paused.load()) { std::this_thread::sleep_for(std::chrono::milliseconds(10)); next = clk::now(); continue; }
+        if (r->paused.load()) { cheevos::idle(); std::this_thread::sleep_for(std::chrono::milliseconds(10)); next = clk::now(); continue; }
         frame();
         if (resumePending && frameNo >= 1) tryResume(), resumePending = false;
         if (diskCount) { disksNow = int(diskCount()); if (diskGetIndex) diskNow = int(diskGetIndex()); }
@@ -671,6 +700,7 @@ void coreThread(Runner* r, Game g) {
         }
     }
     r->running = false;
+    cheevos::stop();
     core.unloadGame();
     core.deinit();
     core.unload();
@@ -806,6 +836,7 @@ void saveState(int slot) {
         if (!n || !ser) { say("This emulator cannot save states"); return; }
         std::vector<uint8_t> d(n);
         if (!ser(d.data(), n) || !writeFile(path, d.data(), n)) { say("Could not save the state"); return; }
+        cheevos::saveProgress(path);
         say("State saved");
     });
 }
@@ -818,6 +849,7 @@ void loadState(int slot) {
         std::vector<uint8_t> d;
         if (!readFile(path, d) || d.empty()) { say("No saved state yet"); return; }
         if (!unser || !unser(d.data(), d.size())) { say("Could not load the state"); return; }
+        cheevos::loadProgress(path);
         say("State loaded");
     });
 }
@@ -844,7 +876,10 @@ void nextDisc() {
 
 void reset() {
     if (remote::on()) { remote::command("reset"); return; }
-    post([] { if (auto f = reinterpret_cast<void (*)()>(coreSym("retro_reset"))) f(); });
+    post([] {
+        if (auto f = reinterpret_cast<void (*)()>(coreSym("retro_reset"))) f();
+        cheevos::reset();
+    });
 }
 
 void setPaused(bool p) { if (remote::on()) remote::setPaused(p); else if (auto r = get()) r->paused = p; }

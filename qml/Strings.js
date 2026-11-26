@@ -8,6 +8,11 @@ var names = {"en": "English", "da": "Dansk", "de": "Deutsch", "es": "Español", 
 
 var strings = {
     en: {
+        "raHint": "Sign in with your retroachievements.org account to earn achievements in your games. Your password is sent once and not kept. Achievements work in softcore: save states, rewind and run-ahead stay on.",
+        "raSignedInAs": "Signed in as %1. Achievements are checked in every game that RetroAchievements knows; an unlock shows at the top of the screen.",
+        "raSignOut": "Sign out",
+        "raSignedIn": "RetroAchievements: signed in as %1",
+        "raSignInFailed": "RetroAchievements sign-in failed: %1",
         "skipIntro": "Skip intro",
         "skipCredits": "Skip credits",
         "nextEpisodeIn": "Next episode in %1 s",
@@ -398,6 +403,11 @@ var strings = {
         "psManualRegister": "It can be registered even if it does not answer the search."
     },
     da: {
+        "raHint": "Log ind med din retroachievements.org-konto for at optjene achievements i dine spil. Din adgangskode sendes én gang og gemmes ikke. Achievements kører i softcore: gemte tilstande, spol tilbage og run-ahead virker stadig.",
+        "raSignedInAs": "Logget ind som %1. Achievements tjekkes i alle spil, RetroAchievements kender; en ny achievement vises øverst på skærmen.",
+        "raSignOut": "Log ud",
+        "raSignedIn": "RetroAchievements: logget ind som %1",
+        "raSignInFailed": "RetroAchievements-login mislykkedes: %1",
         "skipIntro": "Spring intro over",
         "skipCredits": "Spring rulletekster over",
         "nextEpisodeIn": "Næste afsnit om %1 s",
@@ -788,6 +798,11 @@ var strings = {
         "psManualRegister": "Den kan registreres, selv om den ikke svarer på søgningen."
     },
     de: {
+        "raHint": "Melde dich mit deinem retroachievements.org-Konto an, um in deinen Spielen Erfolge zu sammeln. Dein Passwort wird einmal gesendet und nicht gespeichert. Erfolge laufen im Softcore-Modus: Speicherstände, Zurückspulen und Run-Ahead bleiben nutzbar.",
+        "raSignedInAs": "Angemeldet als %1. Erfolge werden in jedem Spiel geprüft, das RetroAchievements kennt; ein neuer Erfolg erscheint oben auf dem Bildschirm.",
+        "raSignOut": "Abmelden",
+        "raSignedIn": "RetroAchievements: angemeldet als %1",
+        "raSignInFailed": "RetroAchievements-Anmeldung fehlgeschlagen: %1",
         "skipIntro": "Intro überspringen",
         "skipCredits": "Abspann überspringen",
         "nextEpisodeIn": "Nächste Folge in %1 s",
@@ -1154,6 +1169,11 @@ var strings = {
         "psManualRegister": "Sie kann registriert werden, auch wenn sie auf die Suche nicht antwortet."
     },
     es: {
+        "raHint": "Inicia sesión con tu cuenta de retroachievements.org para conseguir logros en tus juegos. Tu contraseña se envía una vez y no se guarda. Los logros funcionan en softcore: estados guardados, rebobinado y run-ahead siguen activos.",
+        "raSignedInAs": "Sesión iniciada como %1. Los logros se comprueban en cada juego que RetroAchievements conoce; un logro nuevo aparece arriba en la pantalla.",
+        "raSignOut": "Cerrar sesión",
+        "raSignedIn": "RetroAchievements: sesión iniciada como %1",
+        "raSignInFailed": "Error al iniciar sesión en RetroAchievements: %1",
         "skipIntro": "Saltar intro",
         "skipCredits": "Saltar créditos",
         "nextEpisodeIn": "Siguiente episodio en %1 s",
@@ -1520,6 +1540,11 @@ var strings = {
         "psManualRegister": "Se puede registrar aunque no responda a la búsqueda."
     },
     fr: {
+        "raHint": "Connecte-toi avec ton compte retroachievements.org pour obtenir des succès dans tes jeux. Ton mot de passe est envoyé une fois et n'est pas conservé. Les succès fonctionnent en softcore : sauvegardes d'état, retour en arrière et run-ahead restent disponibles.",
+        "raSignedInAs": "Connecté en tant que %1. Les succès sont vérifiés dans chaque jeu connu de RetroAchievements ; un nouveau succès s'affiche en haut de l'écran.",
+        "raSignOut": "Se déconnecter",
+        "raSignedIn": "RetroAchievements : connecté en tant que %1",
+        "raSignInFailed": "Échec de la connexion à RetroAchievements : %1",
         "skipIntro": "Passer l'intro",
         "skipCredits": "Passer le générique",
         "nextEpisodeIn": "Épisode suivant dans %1 s",
@@ -1886,6 +1911,11 @@ var strings = {
         "psManualRegister": "Elle peut être enregistrée même si elle ne répond pas à la recherche."
     },
     sv: {
+        "raHint": "Logga in med ditt retroachievements.org-konto för att låsa upp achievements i dina spel. Lösenordet skickas en gång och sparas inte. Achievements körs i softcore: sparade lägen, spola tillbaka och run-ahead fungerar fortfarande.",
+        "raSignedInAs": "Inloggad som %1. Achievements kontrolleras i varje spel som RetroAchievements känner till; en upplåst visas överst på skärmen.",
+        "raSignOut": "Logga ut",
+        "raSignedIn": "RetroAchievements: inloggad som %1",
+        "raSignInFailed": "Inloggningen på RetroAchievements misslyckades: %1",
         "skipIntro": "Hoppa över intro",
         "skipCredits": "Hoppa över eftertexter",
         "nextEpisodeIn": "Nästa avsnitt om %1 s",
@@ -2252,6 +2282,11 @@ var strings = {
         "psManualRegister": "Den kan registreras även om den inte svarar på sökningen."
     },
     nb: {
+        "raHint": "Logg inn med retroachievements.org-kontoen din for å låse opp achievements i spillene dine. Passordet sendes én gang og lagres ikke. Achievements kjører i softcore: lagrede tilstander, spol tilbake og run-ahead virker fortsatt.",
+        "raSignedInAs": "Logget inn som %1. Achievements sjekkes i hvert spill RetroAchievements kjenner; en ny achievement vises øverst på skjermen.",
+        "raSignOut": "Logg ut",
+        "raSignedIn": "RetroAchievements: logget inn som %1",
+        "raSignInFailed": "Innlogging på RetroAchievements mislyktes: %1",
         "skipIntro": "Hopp over intro",
         "skipCredits": "Hopp over rulletekst",
         "nextEpisodeIn": "Neste episode om %1 s",
@@ -2618,6 +2653,11 @@ var strings = {
         "psManualRegister": "Den kan registreres selv om den ikke svarer på søket."
     },
     ru: {
+        "raHint": "Войдите с учётной записью retroachievements.org, чтобы получать достижения в играх. Пароль отправляется один раз и не сохраняется. Достижения работают в режиме softcore: сохранения, перемотка и run-ahead остаются доступны.",
+        "raSignedInAs": "Вход выполнен: %1. Достижения проверяются в каждой игре, известной RetroAchievements; новое достижение появляется вверху экрана.",
+        "raSignOut": "Выйти",
+        "raSignedIn": "RetroAchievements: вход выполнен как %1",
+        "raSignInFailed": "Не удалось войти в RetroAchievements: %1",
         "skipIntro": "Пропустить заставку",
         "skipCredits": "Пропустить титры",
         "nextEpisodeIn": "Следующая серия через %1 с",

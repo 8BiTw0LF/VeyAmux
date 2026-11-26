@@ -85,6 +85,7 @@ std::string packGame(const Game& g) {
     std::string s;
     for (const std::string* f : {&g.core, &g.rom, &g.title, &g.systemDir, &g.saveDir, &g.stateDir}) s += *f + kSep;
     s += std::to_string(g.stickAsDpad) + kSep + std::to_string(g.resume) + kSep + std::to_string(g.runAhead) + kSep + std::to_string(g.rewind);
+    s += kSep + g.raUser + kSep + g.raToken + kSep + std::to_string(g.raConsole);
     return s;
 }
 Game unpackGame(const std::string& s) {
@@ -96,6 +97,7 @@ Game unpackGame(const std::string& s) {
     if (f.size() < 10) return g;
     g.core = f[0]; g.rom = f[1]; g.title = f[2]; g.systemDir = f[3]; g.saveDir = f[4]; g.stateDir = f[5];
     g.stickAsDpad = f[6] == "1"; g.resume = f[7] == "1"; g.runAhead = std::atoi(f[8].c_str()); g.rewind = f[9] == "1";
+    if (f.size() >= 13) { g.raUser = f[10]; g.raToken = f[11]; g.raConsole = std::atoi(f[12].c_str()); }
     return g;
 }
 

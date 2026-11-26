@@ -193,6 +193,27 @@ int main(int argc, char** argv) {
         // and a game after it runs
         check(runOnce(argv[1], argv[2], dir, false), "the next game runs after a crash");
     }
+    // RetroAchievements signed in, the server out of reach (or answering no): the game runs and closes as without
+    {
+        retro::Game g;
+        g.core = argv[1]; g.rom = argv[2]; g.title = "achievements";
+        g.systemDir = (dir / "bios").string(); g.saveDir = (dir / "saves").string(); g.stateDir = (dir / "states").string();
+        g.raUser = "veyamux-test"; g.raToken = "not-a-token"; g.raConsole = 4;
+        retro::setGame(g);
+        retro::Stream s;
+        std::string e;
+        check(s.open(e), "with RetroAchievements: opened");
+        RawFrame f;
+        int frames = 0;
+        const auto t0 = std::chrono::steady_clock::now();
+        while (std::chrono::steady_clock::now() - t0 < std::chrono::seconds(2))
+            if (s.readLatest(f, 100, e) == retro::Stream::Result::Frame) ++frames;
+        retro::saveState(1);
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        s.close();
+        std::printf("     %d pictures in 2 s, last message: %s\n", frames, retro::takeMessage().c_str());
+        check(frames > 80 && !retro::running(), "with RetroAchievements: runs and closes");
+    }
     fs::remove_all(dir);
     std::printf(failures ? "%d FAILED\n" : "all ok\n", failures);
     return failures ? 1 : 0;

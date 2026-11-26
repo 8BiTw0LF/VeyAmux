@@ -1899,6 +1899,9 @@ QString PlayerBridge::translateMessage(const QString& msg) const {
         // (RetroRemote.cpp; the longer ones first, they start alike)
         "The emulator crashed while starting the game", "The emulator crashed", "The emulator did not start the game",
         "Could not start the emulator: ", "Could not start the emulator",
+        // RetroAchievements (Achievements.cpp)
+        "Achievement unlocked: ", "All achievements in this game unlocked", "Achievements unlocked so far: ",
+        "RetroAchievements sign-in failed: sign in again on the Games page",
     };
     for (const char* en : prefixes) {
         const QString e = QString::fromUtf8(en);

@@ -157,7 +157,11 @@
   "The emulator crashed": "Emulatoren gik ned",
   "The emulator did not start the game": "Emulatoren startede ikke spillet",
   "Could not start the emulator: ": "Kunne ikke starte emulatoren: ",
-  "Could not start the emulator": "Kunne ikke starte emulatoren"
+  "Could not start the emulator": "Kunne ikke starte emulatoren",
+  "Achievement unlocked: ": "Achievement låst op: ",
+  "All achievements in this game unlocked": "Alle achievements i dette spil er låst op",
+  "Achievements unlocked so far: ": "Achievements låst op indtil nu: ",
+  "RetroAchievements sign-in failed: sign in again on the Games page": "RetroAchievements-login mislykkedes: log ind igen på Spil-siden"
  },
  "de": {
   " (CPU)": " (CPU)",
@@ -411,7 +415,11 @@
   "The emulator crashed": "Der Emulator ist abgestürzt",
   "The emulator did not start the game": "Der Emulator hat das Spiel nicht gestartet",
   "Could not start the emulator: ": "Der Emulator konnte nicht gestartet werden: ",
-  "Could not start the emulator": "Der Emulator konnte nicht gestartet werden"
+  "Could not start the emulator": "Der Emulator konnte nicht gestartet werden",
+  "Achievement unlocked: ": "Erfolg freigeschaltet: ",
+  "All achievements in this game unlocked": "Alle Erfolge in diesem Spiel freigeschaltet",
+  "Achievements unlocked so far: ": "Bisher freigeschaltete Erfolge: ",
+  "RetroAchievements sign-in failed: sign in again on the Games page": "RetroAchievements-Anmeldung fehlgeschlagen: melde dich auf der Spiele-Seite neu an"
  },
  "es": {
   " (CPU)": " (CPU)",
@@ -665,7 +673,11 @@
   "The emulator crashed": "El emulador falló",
   "The emulator did not start the game": "El emulador no inició el juego",
   "Could not start the emulator: ": "No se pudo iniciar el emulador: ",
-  "Could not start the emulator": "No se pudo iniciar el emulador"
+  "Could not start the emulator": "No se pudo iniciar el emulador",
+  "Achievement unlocked: ": "Logro desbloqueado: ",
+  "All achievements in this game unlocked": "Todos los logros de este juego desbloqueados",
+  "Achievements unlocked so far: ": "Logros desbloqueados hasta ahora: ",
+  "RetroAchievements sign-in failed: sign in again on the Games page": "Error de sesión en RetroAchievements: vuelve a iniciar sesión en la página Juegos"
  },
  "fr": {
   " (CPU)": " (CPU)",
@@ -919,7 +931,11 @@
   "The emulator crashed": "L'émulateur a planté",
   "The emulator did not start the game": "L'émulateur n'a pas lancé le jeu",
   "Could not start the emulator: ": "Impossible de lancer l'émulateur : ",
-  "Could not start the emulator": "Impossible de lancer l'émulateur"
+  "Could not start the emulator": "Impossible de lancer l'émulateur",
+  "Achievement unlocked: ": "Succès débloqué : ",
+  "All achievements in this game unlocked": "Tous les succès de ce jeu sont débloqués",
+  "Achievements unlocked so far: ": "Succès débloqués jusqu'ici : ",
+  "RetroAchievements sign-in failed: sign in again on the Games page": "Échec de connexion RetroAchievements : reconnecte-toi sur la page Jeux"
  },
  "nb": {
   " (CPU)": " (CPU)",
@@ -1173,7 +1189,11 @@
   "The emulator crashed": "Emulatoren krasjet",
   "The emulator did not start the game": "Emulatoren startet ikke spillet",
   "Could not start the emulator: ": "Kunne ikke starte emulatoren: ",
-  "Could not start the emulator": "Kunne ikke starte emulatoren"
+  "Could not start the emulator": "Kunne ikke starte emulatoren",
+  "Achievement unlocked: ": "Achievement låst opp: ",
+  "All achievements in this game unlocked": "Alle achievements i dette spillet er låst opp",
+  "Achievements unlocked so far: ": "Achievements låst opp så langt: ",
+  "RetroAchievements sign-in failed: sign in again on the Games page": "Innlogging på RetroAchievements mislyktes: logg inn igjen på Spill-siden"
  },
  "ru": {
   " (CPU)": " (CPU)",
@@ -1427,7 +1447,11 @@
   "The emulator crashed": "Эмулятор аварийно завершился",
   "The emulator did not start the game": "Эмулятор не запустил игру",
   "Could not start the emulator: ": "Не удалось запустить эмулятор: ",
-  "Could not start the emulator": "Не удалось запустить эмулятор"
+  "Could not start the emulator": "Не удалось запустить эмулятор",
+  "Achievement unlocked: ": "Достижение получено: ",
+  "All achievements in this game unlocked": "Все достижения в этой игре получены",
+  "Achievements unlocked so far: ": "Получено достижений: ",
+  "RetroAchievements sign-in failed: sign in again on the Games page": "Не удалось войти в RetroAchievements: войдите снова на странице «Игры»"
  },
  "sv": {
   " (CPU)": " (CPU)",
@@ -1681,6 +1705,10 @@
   "The emulator crashed": "Emulatorn kraschade",
   "The emulator did not start the game": "Emulatorn startade inte spelet",
   "Could not start the emulator: ": "Kunde inte starta emulatorn: ",
-  "Could not start the emulator": "Kunde inte starta emulatorn"
+  "Could not start the emulator": "Kunde inte starta emulatorn",
+  "Achievement unlocked: ": "Achievement upplåst: ",
+  "All achievements in this game unlocked": "Alla achievements i det här spelet är upplåsta",
+  "Achievements unlocked so far: ": "Achievements upplåsta hittills: ",
+  "RetroAchievements sign-in failed: sign in again on the Games page": "Inloggningen på RetroAchievements misslyckades: logga in igen på sidan Spel"
  }
 }

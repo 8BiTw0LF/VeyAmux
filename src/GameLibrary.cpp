@@ -21,6 +21,10 @@
 #include <QRegularExpression>
 #include <QSet>
 #include <QSettings>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QUrlQuery>
 #include <QStandardPaths>
 #include <QSysInfo>
 #include <QTimer>
@@ -886,4 +890,49 @@ void GameLibrary::setCover(const QString& path) {
     emit changed();
 }
 
+// ------------------------------------------------------------------ RetroAchievements
+
+QString GameLibrary::raUser() const { return QSettings().value("games/ra/user").toString(); }
+
+// the password goes to retroachievements.org once; the token it answers with is kept (the settings key has "token"
+// in it, so reports leave it out) and given to the emulator with each game
+void GameLibrary::raSignIn(const QString& user, const QString& password) {
+    if (user.trimmed().isEmpty() || password.isEmpty() || raBusy_) return;
+    if (!net_) net_ = new QNetworkAccessManager(this);
+    raBusy_ = true;
+    emit raChanged();
+    QNetworkRequest rq(QUrl("https://retroachievements.org/dorequest.php"));
+    rq.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
+    rq.setHeader(QNetworkRequest::UserAgentHeader, "VeyAmux/2.1");
+    rq.setTransferTimeout(20000);
+    QUrlQuery form;
+    form.addQueryItem("r", "login2");
+    form.addQueryItem("u", user.trimmed());
+    form.addQueryItem("p", password);
+    QNetworkReply* r = net_->post(rq, form.toString(QUrl::FullyEncoded).toUtf8());
+    connect(r, &QNetworkReply::finished, this, [this, r] {
+        r->deleteLater();
+        raBusy_ = false;
+        const QJsonObject o = QJsonDocument::fromJson(r->readAll()).object();
+        if (o.value("Success").toBool() && !o.value("Token").toString().isEmpty()) {
+            QSettings q;
+            q.setValue("games/ra/user", o.value("User").toString());
+            q.setValue("games/ra/token", o.value("Token").toString());
+            emit message("raSignedIn", o.value("User").toString(), false);
+        } else {
+            const QString why = o.value("Error").toString();
+            emit message("raSignInFailed", why.isEmpty() ? r->errorString() : why, true);
+        }
+        emit raChanged();
+    });
+}
+
+void GameLibrary::raSignOut() {
+    QSettings q;
+    q.remove("games/ra/user");
+    q.remove("games/ra/token");
+    emit raChanged();
+}
+
 } // namespace veyamux
+

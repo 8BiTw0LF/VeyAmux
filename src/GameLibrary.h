@@ -15,6 +15,8 @@
 #include <thread>
 #include <vector>
 
+class QNetworkAccessManager;
+
 namespace veyamux {
 
 struct GameSystem {
@@ -50,6 +52,9 @@ class GameLibrary : public QObject {
     Q_PROPERTY(QString busyArg READ busyArg NOTIFY busyChanged)
     Q_PROPERTY(int progress READ progress NOTIFY busyChanged)           // 0..100, -1 unknown
     Q_PROPERTY(int coverVersion READ coverVersion NOTIFY coversChanged)
+    // RetroAchievements: the signed-in user ("" when none); signing in sends the password once, only the token is kept
+    Q_PROPERTY(QString raUser READ raUser NOTIFY raChanged)
+    Q_PROPERTY(bool raBusy READ raBusy NOTIFY raChanged)
 public:
     explicit GameLibrary(QObject* parent = nullptr);
     ~GameLibrary() override;
@@ -74,6 +79,10 @@ public:
     Q_INVOKABLE void downloadCovers();          // box art for every game that has none
     Q_INVOKABLE void setCover(const QString& path);   // a picture of the user's own
     Q_INVOKABLE QString biosHint(const QString& systemId) const;
+    QString raUser() const;
+    bool raBusy() const { return raBusy_; }
+    Q_INVOKABLE void raSignIn(const QString& user, const QString& password);
+    Q_INVOKABLE void raSignOut();
 
     // for the start of a game: the core to use (found or fetched), "" with the reason in error
     QString coreFor(const QString& systemId, QString& error, bool download);
@@ -83,6 +92,7 @@ signals:
     void changed();
     void busyChanged();
     void coversChanged();
+    void raChanged();
     // ready to play: PlayerBridge::openGame
     void launch(const QString& core, const QString& rom, const QString& title, const QString& systemId, bool resume);
     // a Strings.js key and its %1
@@ -112,6 +122,8 @@ private:
     std::atomic<bool> quit_{false};
     std::atomic<bool> working_{false};
     int coverVersion_ = 0;
+    bool raBusy_ = false;
+    QNetworkAccessManager* net_ = nullptr;
 };
 
 } // namespace veyamux

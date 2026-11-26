@@ -183,6 +183,8 @@ Item {
             Btn { visible: !lib.isMedia && games.folder !== ""; icon: "icons/refresh.svg"; text: lib.tr("gamesRescan"); enabled: games.busy === ""; onClicked: games.rescan() }
             Btn { visible: !lib.isMedia && games.systems.length > 0; icon: "icons/image.svg"; text: lib.tr("gamesCovers"); enabled: games.busy === ""; onClicked: games.downloadCovers() }
             Btn { visible: !lib.isMedia; icon: "icons/system.svg"; text: "BIOS"; onClicked: games.openBiosFolder() }
+            Btn { visible: !lib.isMedia; icon: "icons/trophy.svg"; text: games.raUser !== "" ? games.raUser : "RetroAchievements"
+                onClicked: { addDlg.kind = "ra"; addDlg.visible = true } }
         }
     }
 
@@ -460,7 +462,25 @@ Item {
                 anchors { left: parent.left; right: parent.right; top: parent.top; margins: 22 * lib.k }
                 spacing: 10 * lib.k
                 Text { font.family: Theme.headFont; color: Theme.heading; font.pixelSize: 20 * Theme.headScale * lib.k; font.weight: Font.DemiBold
-                    font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase; text: addDlg.kind === "plex" ? "Plex" : "Jellyfin" }
+                    font.capitalization: Theme.headCaps ? Font.AllUppercase : Font.MixedCase
+                    text: addDlg.kind === "plex" ? "Plex" : addDlg.kind === "ra" ? "RetroAchievements" : "Jellyfin" }
+                // RetroAchievements: signed in (and signing out), or the user name and password
+                Column {
+                    visible: addDlg.kind === "ra"
+                    width: parent.width; spacing: 8 * lib.k
+                    Text { width: parent.width; wrapMode: Text.Wrap; font.family: Theme.font; color: Theme.muted; font.pixelSize: 13 * lib.k
+                        text: games.raUser !== "" ? lib.tr("raSignedInAs").replace("%1", games.raUser) : lib.tr("raHint") }
+                    Field { id: raUserIn; visible: games.raUser === ""; width: parent.width; placeholder: lib.tr("mediaUser") }
+                    Field { id: raPassIn; visible: games.raUser === ""; width: parent.width; placeholder: lib.tr("mediaPassword"); secret: true
+                        onAccepted: games.raSignIn(raUserIn.text, raPassIn.text) }
+                    Flow {
+                        width: parent.width; spacing: 8 * lib.k
+                        Btn { visible: games.raUser === ""; primary: true; text: lib.tr("mediaSignIn"); enabled: raUserIn.text !== "" && raPassIn.text !== "" && !games.raBusy
+                            onClicked: games.raSignIn(raUserIn.text, raPassIn.text) }
+                        Btn { visible: games.raUser !== ""; text: lib.tr("raSignOut"); onClicked: games.raSignOut() }
+                        Btn { text: lib.tr(games.raUser !== "" ? "close" : "cancel"); onClicked: lib.back() }
+                    }
+                }
                 // Jellyfin: the address, then a password or Quick Connect
                 Column {
                     visible: addDlg.kind === "jellyfin" && media.login.kind !== "quick"
@@ -480,7 +500,7 @@ Item {
                 }
                 // a code to confirm elsewhere: Jellyfin's Quick Connect, or Plex's PIN (the browser opened plex.tv)
                 Column {
-                    visible: media.login.kind === "quick" || addDlg.kind === "plex"
+                    visible: addDlg.kind !== "ra" && (media.login.kind === "quick" || addDlg.kind === "plex")
                     width: parent.width; spacing: 10 * lib.k
                     Text { width: parent.width; wrapMode: Text.Wrap; font.family: Theme.font; color: Theme.muted; font.pixelSize: 13 * lib.k
                         text: lib.tr(media.login.kind === "quick" ? "mediaQuickHint" : "mediaPlexHint") }
@@ -501,5 +521,6 @@ Item {
         }
         // signed in: the dialog closes by itself
         Connections { target: media; function onSourcesChanged() { if (addDlg.visible && media.login.kind === undefined) addDlg.visible = false } }
+        Connections { target: games; function onRaChanged() { if (addDlg.visible && addDlg.kind === "ra" && games.raUser !== "") { raPassIn.text = ""; addDlg.visible = false } } }
     }
 }

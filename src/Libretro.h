@@ -28,6 +28,9 @@ struct Game {
     bool resume = false;     // continue where the game was quit (its automatic state)
     int runAhead = 0;        // frames run ahead (0-2): the game's own input delay taken away
     bool rewind = false;     // keep the last seconds, to step back through them
+    // RetroAchievements (Achievements.h): the signed-in account and the console's number there (0: none)
+    std::string raUser, raToken;
+    int raConsole = 0;
 };
 void setGame(const Game& g);
 Game game();
