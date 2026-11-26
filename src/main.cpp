@@ -388,6 +388,8 @@ int main(int argc, char** argv) {
     QObject::connect(&gamepad, &veyamux::GamepadInput::analog, &player, &PlayerBridge::demoPad);
     // PlayStation Remote Play: the controller to the console, the game's rumble back
     QObject::connect(&gamepad, &veyamux::GamepadInput::padState, &player, &PlayerBridge::psPad);
+    QObject::connect(&gamepad, &veyamux::GamepadInput::playerState, &player, &PlayerBridge::psPlayer);
+    QObject::connect(&player, &PlayerBridge::playersReset, &gamepad, &veyamux::GamepadInput::resetPlayers);
     QObject::connect(&player, &PlayerBridge::psRumble, &gamepad, &veyamux::GamepadInput::rumble);
     QObject::connect(&gamepad, &veyamux::GamepadInput::freeButton, &player, [&player](const QString& b) {
         if (b == "y" && player.demoActive()) player.demoPose(-1);
@@ -415,8 +417,8 @@ int main(int argc, char** argv) {
     static TouchFilter touchFilter(&player);
     app.installEventFilter(&touchFilter);
     QObject::connect(&games, &veyamux::GameLibrary::launch, &player,
-                     [&player, &games](const QString& core, const QString& rom, const QString& title, const QString& sys) {
-                         player.openGame(core, rom, title, sys, games.biosFolder());
+                     [&player, &games](const QString& core, const QString& rom, const QString& title, const QString& sys, bool resume) {
+                         player.openGame(core, rom, title, sys, games.biosFolder(), resume);
                      });
     engine.rootContext()->setContextProperty("media", &media);
     engine.rootContext()->setContextProperty("games", &games);
