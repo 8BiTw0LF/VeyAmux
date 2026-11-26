@@ -8,6 +8,13 @@ var names = {"en": "English", "da": "Dansk", "de": "Deutsch", "es": "Español", 
 
 var strings = {
     en: {
+        "gameControls": "Controls",
+        "gameControlsReset": "Usual layout",
+        "gameControlsHint": "Each console button and the controller button it is on. Press one to move it to the next controller button. Kept for this console.",
+        "gameControlsNone": "none",
+        "startPageTitle": "Start in",
+        "startPages": ["Start screen", "Games", "Media"],
+        "startRecent": "Continue playing",
         "raHint": "Sign in with your retroachievements.org account to earn achievements in your games. Your password is sent once and not kept. Achievements work in softcore: save states, rewind and run-ahead stay on.",
         "raSignedInAs": "Signed in as %1. Achievements are checked in every game that RetroAchievements knows; an unlock shows at the top of the screen.",
         "raSignOut": "Sign out",
@@ -403,6 +410,13 @@ var strings = {
         "psManualRegister": "It can be registered even if it does not answer the search."
     },
     da: {
+        "gameControls": "Knapper",
+        "gameControlsReset": "Standardplacering",
+        "gameControlsHint": "Hver konsolknap og den knap på controlleren, den ligger på. Tryk på en for at flytte den til næste knap på controlleren. Gemmes for denne konsol.",
+        "gameControlsNone": "ingen",
+        "startPageTitle": "Start på",
+        "startPages": ["Startskærm", "Spil", "Medier"],
+        "startRecent": "Fortsæt med at spille",
         "raHint": "Log ind med din retroachievements.org-konto for at optjene achievements i dine spil. Din adgangskode sendes én gang og gemmes ikke. Achievements kører i softcore: gemte tilstande, spol tilbage og run-ahead virker stadig.",
         "raSignedInAs": "Logget ind som %1. Achievements tjekkes i alle spil, RetroAchievements kender; en ny achievement vises øverst på skærmen.",
         "raSignOut": "Log ud",
@@ -798,6 +812,13 @@ var strings = {
         "psManualRegister": "Den kan registreres, selv om den ikke svarer på søgningen."
     },
     de: {
+        "gameControls": "Tastenbelegung",
+        "gameControlsReset": "Standardbelegung",
+        "gameControlsHint": "Jede Konsolentaste und die Controller-Taste, auf der sie liegt. Drücke eine, um sie auf die nächste Controller-Taste zu legen. Wird für diese Konsole gespeichert.",
+        "gameControlsNone": "keine",
+        "startPageTitle": "Starten in",
+        "startPages": ["Startbildschirm", "Spiele", "Medien"],
+        "startRecent": "Weiterspielen",
         "raHint": "Melde dich mit deinem retroachievements.org-Konto an, um in deinen Spielen Erfolge zu sammeln. Dein Passwort wird einmal gesendet und nicht gespeichert. Erfolge laufen im Softcore-Modus: Speicherstände, Zurückspulen und Run-Ahead bleiben nutzbar.",
         "raSignedInAs": "Angemeldet als %1. Erfolge werden in jedem Spiel geprüft, das RetroAchievements kennt; ein neuer Erfolg erscheint oben auf dem Bildschirm.",
         "raSignOut": "Abmelden",
@@ -1169,6 +1190,13 @@ var strings = {
         "psManualRegister": "Sie kann registriert werden, auch wenn sie auf die Suche nicht antwortet."
     },
     es: {
+        "gameControls": "Controles",
+        "gameControlsReset": "Disposición habitual",
+        "gameControlsHint": "Cada botón de la consola y el botón del mando donde está. Pulsa uno para pasarlo al siguiente botón del mando. Se guarda para esta consola.",
+        "gameControlsNone": "ninguno",
+        "startPageTitle": "Empezar en",
+        "startPages": ["Pantalla de inicio", "Juegos", "Multimedia"],
+        "startRecent": "Seguir jugando",
         "raHint": "Inicia sesión con tu cuenta de retroachievements.org para conseguir logros en tus juegos. Tu contraseña se envía una vez y no se guarda. Los logros funcionan en softcore: estados guardados, rebobinado y run-ahead siguen activos.",
         "raSignedInAs": "Sesión iniciada como %1. Los logros se comprueban en cada juego que RetroAchievements conoce; un logro nuevo aparece arriba en la pantalla.",
         "raSignOut": "Cerrar sesión",
@@ -1540,6 +1568,13 @@ var strings = {
         "psManualRegister": "Se puede registrar aunque no responda a la búsqueda."
     },
     fr: {
+        "gameControls": "Commandes",
+        "gameControlsReset": "Disposition habituelle",
+        "gameControlsHint": "Chaque bouton de la console et le bouton de la manette où il se trouve. Appuie sur un bouton pour le placer sur le bouton suivant de la manette. Conservé pour cette console.",
+        "gameControlsNone": "aucun",
+        "startPageTitle": "Démarrer sur",
+        "startPages": ["Écran d'accueil", "Jeux", "Médias"],
+        "startRecent": "Reprendre",
         "raHint": "Connecte-toi avec ton compte retroachievements.org pour obtenir des succès dans tes jeux. Ton mot de passe est envoyé une fois et n'est pas conservé. Les succès fonctionnent en softcore : sauvegardes d'état, retour en arrière et run-ahead restent disponibles.",
         "raSignedInAs": "Connecté en tant que %1. Les succès sont vérifiés dans chaque jeu connu de RetroAchievements ; un nouveau succès s'affiche en haut de l'écran.",
         "raSignOut": "Se déconnecter",
@@ -1911,6 +1946,13 @@ var strings = {
         "psManualRegister": "Elle peut être enregistrée même si elle ne répond pas à la recherche."
     },
     sv: {
+        "gameControls": "Knappar",
+        "gameControlsReset": "Standardlayout",
+        "gameControlsHint": "Varje konsolknapp och knappen på handkontrollen den ligger på. Tryck på en för att flytta den till nästa knapp. Sparas för den här konsolen.",
+        "gameControlsNone": "ingen",
+        "startPageTitle": "Starta i",
+        "startPages": ["Startskärm", "Spel", "Media"],
+        "startRecent": "Fortsätt spela",
         "raHint": "Logga in med ditt retroachievements.org-konto för att låsa upp achievements i dina spel. Lösenordet skickas en gång och sparas inte. Achievements körs i softcore: sparade lägen, spola tillbaka och run-ahead fungerar fortfarande.",
         "raSignedInAs": "Inloggad som %1. Achievements kontrolleras i varje spel som RetroAchievements känner till; en upplåst visas överst på skärmen.",
         "raSignOut": "Logga ut",
@@ -2282,6 +2324,13 @@ var strings = {
         "psManualRegister": "Den kan registreras även om den inte svarar på sökningen."
     },
     nb: {
+        "gameControls": "Knapper",
+        "gameControlsReset": "Standardoppsett",
+        "gameControlsHint": "Hver konsollknapp og knappen på kontrolleren den ligger på. Trykk på en for å flytte den til neste knapp. Lagres for denne konsollen.",
+        "gameControlsNone": "ingen",
+        "startPageTitle": "Start i",
+        "startPages": ["Startskjerm", "Spill", "Medier"],
+        "startRecent": "Fortsett å spille",
         "raHint": "Logg inn med retroachievements.org-kontoen din for å låse opp achievements i spillene dine. Passordet sendes én gang og lagres ikke. Achievements kjører i softcore: lagrede tilstander, spol tilbake og run-ahead virker fortsatt.",
         "raSignedInAs": "Logget inn som %1. Achievements sjekkes i hvert spill RetroAchievements kjenner; en ny achievement vises øverst på skjermen.",
         "raSignOut": "Logg ut",
@@ -2653,6 +2702,13 @@ var strings = {
         "psManualRegister": "Den kan registreres selv om den ikke svarer på søket."
     },
     ru: {
+        "gameControls": "Управление",
+        "gameControlsReset": "Обычная раскладка",
+        "gameControlsHint": "Каждая кнопка консоли и кнопка контроллера, на которой она находится. Нажмите, чтобы перенести её на следующую кнопку. Сохраняется для этой консоли.",
+        "gameControlsNone": "нет",
+        "startPageTitle": "Открывать при запуске",
+        "startPages": ["Стартовый экран", "Игры", "Медиа"],
+        "startRecent": "Продолжить игру",
         "raHint": "Войдите с учётной записью retroachievements.org, чтобы получать достижения в играх. Пароль отправляется один раз и не сохраняется. Достижения работают в режиме softcore: сохранения, перемотка и run-ahead остаются доступны.",
         "raSignedInAs": "Вход выполнен: %1. Достижения проверяются в каждой игре, известной RetroAchievements; новое достижение появляется вверху экрана.",
         "raSignOut": "Выйти",

@@ -171,6 +171,37 @@ Window {
                     }
                 }
             }
+            // continue playing: the last games (with "Continue" from where they were quit)
+            Column {
+                visible: games.recentGames.length > 0
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: 8 * startCol.k
+                Text { font.family: Theme.font; anchors.horizontalCenter: parent.horizontalCenter; text: t("startRecent"); color: Theme.label
+                    font.pixelSize: 15 * startCol.k; font.weight: Font.DemiBold }
+                Row {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: 12 * startCol.k
+                    Repeater {
+                        model: games.recentGames.slice(0, Math.max(1, Math.min(6, Math.floor((win.width - 80) / (150 * startCol.k)))))
+                        delegate: Rectangle {
+                            required property var modelData
+                            width: 138 * startCol.k; height: 92 * startCol.k; radius: 12 * Theme.round
+                            color: rgMa.containsMouse ? Theme.surfaceHover : Theme.surface; clip: true
+                            border.width: Math.max(1, Theme.edge); border.color: rgMa.containsMouse ? Theme.accentLine : Theme.border
+                            Image { id: rgImg; anchors { fill: parent; margins: 6 * startCol.k; bottomMargin: 26 * startCol.k }
+                                source: modelData.image || ""; fillMode: Image.PreserveAspectFit; asynchronous: true
+                                sourceSize: Qt.size(240, 160) }
+                            Image { visible: rgImg.status !== Image.Ready; anchors.centerIn: rgImg; source: "icons/joystick.svg"; width: 26 * startCol.k; height: width
+                                sourceSize: Qt.size(52, 52); opacity: 0.5 }
+                            Text { anchors { left: parent.left; right: parent.right; bottom: parent.bottom; margins: 6 * startCol.k }
+                                font.family: Theme.font; font.pixelSize: 12 * startCol.k; color: Theme.heading; elide: Text.ElideRight
+                                horizontalAlignment: Text.AlignHCenter; text: (modelData.canResume ? "▶ " : "") + modelData.title }
+                            MouseArea { id: rgMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                onClicked: { win.returnTo = "games"; games.play(modelData.key, modelData.canResume) } }
+                        }
+                    }
+                }
+            }
             // the demo: try every feature without a capture card
             Column {
                 visible: player.demoAvailable
@@ -847,11 +878,14 @@ Window {
         }
     }
     }   // hdrRoot
+    Timer { id: testMenuTimer; interval: testMenu; onTriggered: { win.panelOpen = true; panel.mapOpen = true } }
     Component.onCompleted: {
         hideTimer.start()
         if (startDialog) capDlg.openDialog()
         if (player.signalTestResults.length > 0) { capDlg.openDialog(); capDlg.testView = true }   // VEYAMUX_TEST_SIGNALTEST
         if (testPage === "audio") Qt.callLater(function () { trackPopup.toggle("audio", audioBtn) })   // VEYAMUX_TEST_PAGE=audio
         else if (testPage !== "") lib.openPage(testPage)                                          // VEYAMUX_TEST_PAGE
+        else if (startPageNow !== "") lib.openPage(startPageNow)                                  // System -> Start in
+        if (testMenu > 0) testMenuTimer.start()
     }
 }

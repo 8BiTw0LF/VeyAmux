@@ -617,6 +617,17 @@ QVariantMap GameLibrary::itemFor(const Entry& e) const {
                             e.path.toStdString())))}};
 }
 
+QVariantList GameLibrary::recentGames() const {
+    QVariantList out;
+    const QStringList recent = QSettings().value("games/recent").toStringList();
+    std::lock_guard l(m_);
+    for (const auto& p : recent) {
+        for (const auto& e : entries_) if (e.path == p) { out << itemFor(e); break; }
+        if (out.size() >= 6) break;
+    }
+    return out;
+}
+
 QVariantList GameLibrary::items() const {
     QVariantList out;
     if (current_ == "recent") {

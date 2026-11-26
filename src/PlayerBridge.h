@@ -67,6 +67,11 @@ class PlayerBridge : public QObject {
     Q_PROPERTY(QStringList retroCores READ retroCores NOTIFY retroOptionsChanged)
     Q_PROPERTY(QString retroCore READ retroCore WRITE setRetroCore NOTIFY retroOptionsChanged)
     Q_PROPERTY(QString retroCoreRunning READ retroCoreRunning NOTIFY retroOptionsChanged)
+    // the console's buttons and the controller button each one is on, kept per system:
+    // [{button: "B", phys: 0}] (phys: Cross 0, Circle 1, Square 2, Triangle 3, L1 8, R1 9, Options 12, Share 13, L2 16, R2 17, -1 none)
+    Q_PROPERTY(QVariantList retroMap READ retroMap NOTIFY retroOptionsChanged)
+    // the page VeyAmux opens on: "" (the start screen), "games" or "media"
+    Q_PROPERTY(QString startPage READ startPage WRITE setStartPage NOTIFY startPageChanged)
     Q_PROPERTY(int retroDisc READ retroDisc NOTIFY retroDiscChanged)    // the one in the tray (1 = the first)
     // subtitles (PlayerBridgeSubtitles.cpp): the tracks [{id, name, lang}], the one shown (-1 off), the line due now
     // (text, or a picture: its URL, its place on the video as fractions, the video's aspect)
@@ -259,6 +264,11 @@ public:
     QString retroCore() const;
     void setRetroCore(const QString& core);
     QString retroCoreRunning() const { return retroCoreRunning_; }
+    QVariantList retroMap() const;
+    Q_INVOKABLE void cycleRetroMap(int row);       // the next controller button for that console button
+    Q_INVOKABLE void resetRetroMap();
+    QString startPage() const { return QSettings().value("ui/startPage").toString(); }
+    void setStartPage(const QString& p) { QSettings().setValue("ui/startPage", p); emit startPageChanged(); }
     int retroDisc() const { return retroDisc_; }
     QVariantList subtitleTracks() const;
     QVariantList audioTracks() const;
@@ -701,6 +711,7 @@ signals:
     void retroDiscChanged();
     void retroOptionsChanged();
     void subtitleStyleChanged();
+    void startPageChanged();
     void playersReset();                // a game starts: the controllers' next presses decide the players
     void subtitleChanged();
     void updateChanged();
@@ -760,6 +771,8 @@ private:
     int retroDiscs_ = 0, retroDisc_ = 0;
     QString retroSystem_;
     bool retroRewindKey_ = false;
+    std::vector<std::pair<int, int>> retroMap_;   // libretro button -> controller button, for this system (empty: the usual)
+    void loadRetroMap();
     bool retroRewinding_ = false;
     QString retroCoreRunning_;         // the emulator of the game running (its file name without _libretro.so)      // L2 held for rewind (with hysteresis)
     double demoProgress_ = 0;

@@ -47,6 +47,7 @@ class GameLibrary : public QObject {
     Q_PROPERTY(QVariantList systems READ systems NOTIFY changed)        // [{id, name, count}] with games; "recent" first
     Q_PROPERTY(QString current READ current NOTIFY changed)
     Q_PROPERTY(QVariantList items READ items NOTIFY changed)            // the games of the current system
+    Q_PROPERTY(QVariantList recentGames READ recentGames NOTIFY changed)   // the last played (at most 6), for the start screen
     // what runs in the background: a Strings.js key ("" when idle) and its %1
     Q_PROPERTY(QString busy READ busy NOTIFY busyChanged)
     Q_PROPERTY(QString busyArg READ busyArg NOTIFY busyChanged)
@@ -64,6 +65,7 @@ public:
     QVariantList systems() const;
     QString current() const { return current_; }
     QVariantList items() const;
+    QVariantList recentGames() const;
     QString busy() const { std::lock_guard l(m_); return busy_; }
     QString busyArg() const { std::lock_guard l(m_); return busyArg_; }
     int progress() const { return progress_.load(); }

@@ -455,6 +455,11 @@ int main(int argc, char** argv) {
     engine.rootContext()->setContextProperty("keepControls", !grabPath.isEmpty());
     // Test hook: open the Media or Games page at start (VEYAMUX_TEST_PAGE=media | games, for screenshots)
     engine.rootContext()->setContextProperty("testPage", qEnvironmentVariable("VEYAMUX_TEST_PAGE"));
+    // (VEYAMUX_TEST_MENU=<ms>: the menu opens then, with a game's controller layout shown - for screenshots)
+    engine.rootContext()->setContextProperty("testMenu", qEnvironmentVariableIntValue("VEYAMUX_TEST_MENU"));
+    // the page to open on (System -> Start in), unless a capture card, a file or a dialog was asked for
+    engine.rootContext()->setContextProperty("startPageNow", capturePath.isEmpty() && openFile.isEmpty() && grabPath.isEmpty()
+                                                                 ? player.startPage() : QString());
     player.setVrrAtStart(vrrAtStart);
     player.setRunContext(vulkanUi, lsfgEnabled, lsfgCrashed);
     // Test hook: the capture dialog's signal test with sample results (VEYAMUX_TEST_SIGNALTEST=1, for screenshots)

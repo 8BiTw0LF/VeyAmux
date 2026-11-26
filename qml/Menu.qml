@@ -19,6 +19,11 @@ Rectangle {
     function switchTab(step) { tab = (tab + step + tabs.length) % tabs.length; flickArea.contentY = 0 }
 
     property int tab: 0
+    property bool mapOpen: false             // the game's controller layout rows are shown
+    function physName(p) {
+        const n = {0: "A / ✕", 1: "B / ○", 2: "X / □", 3: "Y / △", 8: "LB / L1", 9: "RB / R1", 16: "LT / L2", 17: "RT / R2", 12: "Menu / Options", 13: "View / Share"}
+        return n[p] !== undefined ? n[p] : tr("gameControlsNone")
+    }
     // --tab=N opens the menu on tab N (screenshots, tests)
     Component.onCompleted: { for (const a of Qt.application.arguments) if (a.startsWith("--tab=")) tab = parseInt(a.substring(6)) }
     readonly property var tabs: [
@@ -159,6 +164,17 @@ Rectangle {
         Text { visible: player.retroActive && player.retroCores.length > 1 && player.retroCore !== player.retroCoreRunning
             width: parent.width; wrapMode: Text.Wrap; font.family: Theme.font; color: Theme.dim; font.pixelSize: 12
             text: tr("gameEmulatorNext") }
+        // the controller layout for this system: a press moves the console button to the next controller button
+        Item { visible: player.retroActive; width: parent.width; height: 1 }
+        Btn { visible: player.retroActive; text: tr("gameControls") + (menu.mapOpen ? " ▴" : " ▾"); onClicked: menu.mapOpen = !menu.mapOpen }
+        Repeater {
+            model: player.retroActive && menu.mapOpen ? player.retroMap : []
+            delegate: Btn { required property var modelData; required property int index
+                text: modelData.button + "  ←  " + menu.physName(modelData.phys); onClicked: player.cycleRetroMap(index) }
+        }
+        Btn { visible: player.retroActive && menu.mapOpen; text: tr("gameControlsReset"); onClicked: player.resetRetroMap() }
+        Text { visible: player.retroActive && menu.mapOpen; width: parent.width; wrapMode: Text.Wrap; font.family: Theme.font; color: Theme.dim; font.pixelSize: 12
+            text: tr("gameControlsHint") }
         Item { visible: player.retroActive; width: parent.width; height: 1 }
         Btn { visible: player.retroActive && player.retroDiscs > 1; primary: true
             text: tr("gameDisc").replace("%1", player.retroDisc % player.retroDiscs + 1).replace("%2", player.retroDiscs)
@@ -632,6 +648,10 @@ Rectangle {
                                 text: gamepad.controllers.length > 0 ? "● " + tr("padOn").replace("%1", gamepad.controllers.join(", ")) : tr("padNone") }
                         }
                         Hint { text: tr("padHint") }
+                        // the page VeyAmux opens on (from Steam's Game Mode: straight to the games or films)
+                        Title { text: tr("startPageTitle") }
+                        Segmented { width: parent.width; model: tr("startPages"); current: ["", "games", "media"].indexOf(player.startPage)
+                            onPicked: (i) => player.startPage = ["", "games", "media"][i] }
                         // a click or tap on the picture, and the touchscreen
                         Title { text: tr("clickTitle") }
                         Segmented { width: parent.width; model: tr("clickModes"); current: player.clickAction; onPicked: (i) => player.clickAction = i }
