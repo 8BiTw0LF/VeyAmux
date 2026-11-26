@@ -65,6 +65,7 @@ public:
     QVariantList systems() const;
     QString current() const { return current_; }
     QVariantList items() const;
+    QVariantList itemsNow() const;
     QVariantList recentGames() const;
     QString busy() const { std::lock_guard l(m_); return busy_; }
     QString busyArg() const { std::lock_guard l(m_); return busyArg_; }
@@ -124,6 +125,9 @@ private:
     std::atomic<bool> quit_{false};
     std::atomic<bool> working_{false};
     int coverVersion_ = 0;
+    // items() for the current system, made once per change (each card looks at its cover and states on disk)
+    mutable QVariantList itemsCache_;
+    mutable bool itemsValid_ = false;
     bool raBusy_ = false;
     QNetworkAccessManager* net_ = nullptr;
 };

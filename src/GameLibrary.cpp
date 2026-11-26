@@ -267,6 +267,9 @@ QString matchThumbnail(const QString& stem, const QStringList& names) {
 // ------------------------------------------------------------------ GameLibrary
 
 GameLibrary::GameLibrary(QObject* parent) : QObject(parent) {
+    // (connected first, so the list is made anew before the page asks for it)
+    connect(this, &GameLibrary::changed, this, [this] { itemsValid_ = false; });
+    connect(this, &GameLibrary::coversChanged, this, [this] { itemsValid_ = false; });
     folder_ = QSettings().value("games/folder").toString();
     load();
     current_ = QSettings().value("games/system").toString();
@@ -356,6 +359,7 @@ void GameLibrary::load() {
     entries_.clear();
     for (const auto& v : o.value("games").toArray()) {
         const QJsonObject g = v.toObject();
+        if (isBiosFile(g.value("path").toString(), folder_)) continue;   // (a list kept from before a BIOS name was known)
         entries_.push_back({g.value("path").toString(), g.value("system").toString(), g.value("title").toString(), g.value("region").toString(),
                             g.value("thumb").toString()});
     }
@@ -432,7 +436,12 @@ bool GameLibrary::isBiosFile(const QString& path, const QString& root) {
     static const QRegularExpression names(
         R"re(^(syscard\d*[uj]?|gecard|gexpress|sgb\d?(\b.*)?|super game boy.*|game ?genie.*|gamegenie.*|disksys|lynxboot|scph\d+.*|ps1_rom|)re"
         R"re(mpr-\d+.*|sega_101|saturn_bios|kick\d.*|firmware.*|dmg_boot|cgb_boot|gba_bios|gb_bios|gbc_bios|sgb_bios|.*_bios|)re"
-        R"re(.*\(bios\).*|bios_cd_[euj]|bios[_ ][euj]|bios_md|bios_ms|bios_gg|segacd_.*bios.*|mpr-17933|sega cd bios.*)$)re");
+        R"re(.*\(bios\).*|bios_cd_[euj]|bios[_ ][euj]|bios_md|bios_ms|bios_gg|segacd_.*bios.*|mpr-17933|sega cd bios.*|)re"
+        // Dreamcast / NAOMI / Atomiswave (Flycast), the 64DD, PSP, and FinalBurn Neo's / MAME's BIOS sets
+        R"re(dc_boot|dc_flash|dc_nvmem|naomi\d?|naomigd|naomi2|awbios|airlbios|f355bios|f355dlx|hod2bios|segasp|hikaru|triforce|)re"
+        R"re(ipl|64dd_ipl.*|64ddipl.*|ppge_atlas|neogeo|neocdz|pgm|skns|isgsm|decocass|cchip|nmk004|ym2608|qsound|bubsys|midssio|)re"
+        R"re(namcoc\d+|stvbios|cpzn[12]|tps|taitofx1|hng64|konamigx|kn46|megaplay|megatech|playch10|nss|coleco|msx|spec128|)re"
+        R"re(spectrum|fdsbios|channelf|sms_bios|gg_bios|segacd)$)re");
     if (names.match(stem).hasMatch()) return true;
     // a folder of BIOS files inside the games folder
     for (const auto& part : QDir(root).relativeFilePath(QFileInfo(path).absolutePath()).toLower().split('/'))
@@ -640,6 +649,13 @@ QVariantList GameLibrary::recentGames() const {
 }
 
 QVariantList GameLibrary::items() const {
+    if (itemsValid_) return itemsCache_;
+    itemsCache_ = itemsNow();
+    itemsValid_ = true;
+    return itemsCache_;
+}
+
+QVariantList GameLibrary::itemsNow() const {
     QVariantList out;
     if (current_ == "recent") {
         const QStringList recent = QSettings().value("games/recent").toStringList();
