@@ -753,19 +753,60 @@ void GameLibrary::play(const QString& path, bool resume) {
     QSettings().setValue("games/recent", recent);
     QString err;
     const QString core = coreFor(sys, err, false);
-    if (!core.isEmpty()) { emit launch(core, path, title, sys, resume); emit changed(); return; }
+    if (!core.isEmpty() && coreAssets(sys, err, false)) { emit launch(core, path, title, sys, resume); emit changed(); return; }
     // fetched in the background, then started
     if (working_) return;
     setBusy("gamesFetchingCore", {}, 0);
     work([this, sys, path, title, resume] {
         QString e;
-        const QString c = coreFor(sys, e, true);
+        QString c = coreFor(sys, e, true);
+        if (!c.isEmpty() && !coreAssets(sys, e, true)) c.clear();
         QMetaObject::invokeMethod(this, [this, c, e, path, title, sys, resume] {
-            if (c.isEmpty()) { emit message(e, QString::fromLatin1(gameSystem(sys)->cores).section(',', 0, 0), true); return; }
+            if (c.isEmpty()) {
+                if (e == "gamesAssetsFailed") emit message(e, "PPSSPP", true);
+                else emit message(e, QString::fromLatin1(gameSystem(sys)->cores).section(',', 0, 0), true);
+                return;
+            }
             emit launch(c, path, title, sys, resume);
             emit changed();
         }, Qt::QueuedConnection);
     });
+}
+
+// PPSSPP crashes at start without its assets (fonts, ppge_atlas.zim) in <BIOS folder>/PPSSPP; RetroArch's "core system
+// files" are fetched from the same place
+bool GameLibrary::coreAssets(const QString& systemId, QString& error, bool download) {
+    if (systemId != "psp") return true;
+    const QString bios = biosFolder();
+    if (QFile::exists(bios + "/PPSSPP/ppge_atlas.zim")) return true;
+    if (!download) return false;
+    setBusy("gamesFetchingAssets", "PPSSPP", 0);
+    const QString zip = dataDir("cores") + "/PPSSPP.download.zip";
+    QString err;
+    if (!httpsDownload("https://buildbot.libretro.com/assets/system/PPSSPP.zip", zip, 256ll << 20,
+                       [this](int p) { setBusy("gamesFetchingAssets", "PPSSPP", p); }, err)) {
+        QFile::remove(zip);
+        qWarning("Games: could not fetch PPSSPP's files: %s", qPrintable(err));
+        error = "gamesAssetsFailed";
+        return false;
+    }
+    int written = 0;
+    for (const auto& en : retro::zipList(zip.toStdString())) {
+        QString name = QString::fromStdString(en.name);
+        if (name.endsWith('/') || name.contains("..")) continue;
+        if (!name.startsWith("PPSSPP/")) name = "PPSSPP/" + name;   // (the files at the archive's top)
+        std::vector<uint8_t> d;
+        std::string e;
+        if (!retro::zipRead(zip.toStdString(), en.name, d, e)) continue;
+        const QString dest = bios + "/" + name;
+        QDir().mkpath(QFileInfo(dest).absolutePath());
+        QFile f(dest);
+        if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) { f.write(reinterpret_cast<const char*>(d.data()), qint64(d.size())); ++written; }
+    }
+    QFile::remove(zip);
+    qInfo("Games: PPSSPP's files (%d) put in %s/PPSSPP", written, qPrintable(bios));
+    if (!QFile::exists(bios + "/PPSSPP/ppge_atlas.zim")) { error = "gamesAssetsFailed"; return false; }
+    return true;
 }
 
 // ------------------------------------------------------------------ box art

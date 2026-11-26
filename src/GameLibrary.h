@@ -89,6 +89,8 @@ public:
 
     // for the start of a game: the core to use (found or fetched), "" with the reason in error
     QString coreFor(const QString& systemId, QString& error, bool download);
+    // files an emulator needs beside the BIOS (PPSSPP's fonts and pictures): there, or fetched (download) from libretro
+    bool coreAssets(const QString& systemId, QString& error, bool download);
     QString coverPath(const QString& systemId, const QString& romPath) const;
 
 signals:
