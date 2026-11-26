@@ -6,6 +6,7 @@
 #include "Diagnostics.h"
 #include "Gamepad.h"
 #include "GameLibrary.h"
+#include "SteamShortcut.h"
 #include <QQuickImageProvider>
 #include <QMouseEvent>
 #include <QPointingDevice>
@@ -628,6 +629,12 @@ int main(int argc, char** argv) {
             qInfo("TEST audio: track %d, at %.2f s (was %.2f), %lld tracks, %lld subtitle tracks", player.audioTrack(), player.position(), before,
                   qlonglong(player.audioTracks().size()), qlonglong(player.subtitleTracks().size()));
         });
+    // (VEYAMUX_TEST_ARTWORK=<folder>: write the Steam library artwork there and quit)
+    if (const QString ta = qEnvironmentVariable("VEYAMUX_TEST_ARTWORK"); !ta.isEmpty()) {
+        const auto art = veyamux::steam::artwork();
+        for (auto it = art.begin(); it != art.end(); ++it) it.value().save(ta + "/grid" + it.key() + ".png");
+        return 0;
+    }
     // (VEYAMUX_TEST_COVERS=1: fetch the box art at start)
     if (qEnvironmentVariableIsSet("VEYAMUX_TEST_COVERS")) QTimer::singleShot(2500, [&games] { games.downloadCovers(); });
     // --capture last: the card used last time (Steam / Game Mode shortcut)
