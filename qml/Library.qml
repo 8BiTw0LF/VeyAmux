@@ -152,7 +152,28 @@ Item {
         Row {
             anchors { right: parent.right; verticalCenter: parent.verticalCenter }
             spacing: 8 * lib.k
-            // Media
+            // Media: search the server (films, series, episodes); Enter searches, the list comes as a folder (B goes back)
+            Rectangle {
+                id: searchBox
+                visible: lib.isMedia && media.canSearch
+                width: 240 * lib.k; height: 38 * lib.k; radius: 10 * Theme.round
+                color: Theme.surfaceDeep; border.width: Math.max(1, Theme.edge); border.color: searchIn.activeFocus ? Theme.accentLine : Theme.border
+                Image { id: searchIcon; source: "icons/search.svg"; width: 16 * lib.k; height: width; sourceSize: Qt.size(32, 32); opacity: 0.7
+                    anchors { left: parent.left; leftMargin: 10 * lib.k; verticalCenter: parent.verticalCenter } }
+                TextInput {
+                    id: searchIn
+                    anchors { left: searchIcon.right; right: parent.right; leftMargin: 8 * lib.k; rightMargin: 10 * lib.k; verticalCenter: parent.verticalCenter }
+                    font.family: Theme.font; font.pixelSize: 14 * lib.k; color: Theme.heading; clip: true
+                    selectByMouse: true
+                    onAccepted: { media.search(text); focus = false }
+                    Keys.onEscapePressed: { text = ""; focus = false }
+                }
+                Text { anchors.fill: searchIn; verticalAlignment: Text.AlignVCenter; visible: searchIn.text === "" && !searchIn.activeFocus
+                    font.family: Theme.font; font.pixelSize: 14 * lib.k; color: Theme.dim; text: lib.tr("mediaSearch") }
+                // (a click, or A on the controller: the field takes the keys; Steam's own keyboard is Steam + X)
+                MouseArea { anchors.fill: parent; visible: !searchIn.activeFocus; cursorShape: Qt.IBeamCursor
+                    onClicked: { searchIn.forceActiveFocus(); Qt.inputMethod.show() } }
+            }
             Btn { visible: lib.isMedia; icon: "icons/folder.svg"; text: lib.tr("mediaOpenFile"); onClicked: player.openDialog() }
             Btn { visible: lib.isMedia; icon: "icons/plus.svg"; text: "Jellyfin"; onClicked: { addDlg.kind = "jellyfin"; addDlg.visible = true } }
             Btn { visible: lib.isMedia; icon: "icons/plus.svg"; text: "Plex"; onClicked: { addDlg.kind = "plex"; addDlg.visible = true; media.addPlex() } }

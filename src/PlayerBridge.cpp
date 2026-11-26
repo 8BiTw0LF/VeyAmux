@@ -128,6 +128,7 @@ PlayerBridge::PlayerBridge(const QString& shaderDir, QObject* parent)
     engine_.setCallbacks(cb);
     engine_.setAudioSink(audioOutput().toStdString());
     engine_.setNormalize(normalize());
+    engine_.setSurround(surround());
     applyEnhance();
     {
         QSettings q;

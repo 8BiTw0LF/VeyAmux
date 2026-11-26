@@ -182,6 +182,27 @@ Rectangle {
             delegate: Btn { required property var modelData; text: modelData.name; opacity: player.subtitleTrack === modelData.id ? 1 : 0.6
                 onClicked: player.subtitleTrack = modelData.id }
         }
+        // the size of text subtitles
+        Item { visible: player.subtitleTracks.length > 0; width: parent.width; height: 1 }
+        Text { visible: player.subtitleTracks.length > 0; height: 38; verticalAlignment: Text.AlignVCenter; font.family: Theme.font
+            text: tr("subtitleSize"); color: Theme.label; font.pixelSize: 14 }
+        Repeater {
+            model: player.subtitleTracks.length > 0 ? tr("subtitleSizes") : []
+            delegate: Btn { required property string modelData; required property int index; text: modelData
+                opacity: player.subtitleSize === index ? 1 : 0.6; onClicked: player.subtitleSize = index }
+        }
+        // Jellyfin / Plex: the file as it is, or converted by the server to less data (a slow network, away from home)
+        Item { visible: media.streaming; width: parent.width; height: 1 }
+        Text { visible: media.streaming; height: 38; verticalAlignment: Text.AlignVCenter; font.family: Theme.font
+            text: tr("streamQuality"); color: Theme.label; font.pixelSize: 14 }
+        Repeater {
+            model: media.streaming ? [0, 20, 8, 4] : []
+            delegate: Btn { required property int modelData; text: modelData === 0 ? tr("qualityOriginal") : modelData + " Mbit/s"
+                opacity: media.quality === modelData ? 1 : 0.6; onClicked: media.quality = modelData }
+        }
+        Text { visible: media.streaming; width: parent.width; wrapMode: Text.Wrap; font.family: Theme.font; color: Theme.dim; font.pixelSize: 12
+            text: tr("streamQualityHint") }
+        Item { visible: player.retroActive || media.playingFromLibrary; width: parent.width; height: 1 }
         Btn { visible: player.retroActive || media.playingFromLibrary; primary: true; text: tr(player.retroActive ? "gameQuit" : "mediaStop")
             onClicked: { menu.closeRequested(); if (media.playingFromLibrary) media.stopPlayback(); else player.closeMedia() } }
     }
@@ -503,6 +524,8 @@ Rectangle {
                     Param { label: tr("audioDelay"); from: -300; to: 300; decimals: 0; neutral: 0; value: player.audioDelay; onMoved: (v) => player.audioDelay = Math.round(v / 10) * 10 }
                     Hint { text: tr("audioDelayHint") }
                     SwitchRow { text: tr("normalize"); checked: player.normalize; onToggled: (v) => player.normalize = v }
+                    SwitchRow { text: tr("surround"); checked: player.surround; onToggled: (v) => player.surround = v }
+                    Hint { text: tr("surroundHint") }
                 }
 
                 // ======================================== Record & stream

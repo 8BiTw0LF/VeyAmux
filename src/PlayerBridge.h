@@ -92,6 +92,8 @@ class PlayerBridge : public QObject {
     // Output device (sink name, "" = system default) and loudness levelling
     Q_PROPERTY(QString audioOutput READ audioOutput WRITE setAudioOutput NOTIFY audioChanged)
     Q_PROPERTY(bool normalize READ normalize WRITE setNormalize NOTIFY audioChanged)
+    Q_PROPERTY(bool surround READ surround WRITE setSurround NOTIFY audioChanged)        // 5.1 films as 5.1
+    Q_PROPERTY(int subtitleSize READ subtitleSize WRITE setSubtitleSize NOTIFY subtitleStyleChanged)   // 0 small .. 3 largest
     Q_PROPERTY(bool muted READ muted WRITE setMuted NOTIFY audioChanged)
     // spectrum of the source's sound (before volume and mute): 24 bands 0..1, ~30 updates per second
     Q_PROPERTY(QVariantList audioBands READ audioBands NOTIFY audioMeterChanged)
@@ -608,6 +610,10 @@ public slots:
     void setAudioOutput(const QString& s) { QSettings().setValue("audio/sink", s); engine_.setAudioSink(s.toStdString()); emit audioChanged(); }
     bool normalize() const { return QSettings().value("audio/normalize", false).toBool(); }
     void setNormalize(bool v) { QSettings().setValue("audio/normalize", v); engine_.setNormalize(v); emit audioChanged(); }
+    bool surround() const { return QSettings().value("audio/surround", false).toBool(); }
+    void setSurround(bool v) { QSettings().setValue("audio/surround", v); engine_.setSurround(v); emit audioChanged(); }
+    int subtitleSize() const { return std::clamp(QSettings().value("subs/size", 1).toInt(), 0, 3); }
+    void setSubtitleSize(int v) { QSettings().setValue("subs/size", std::clamp(v, 0, 3)); emit subtitleStyleChanged(); }
     QString guessAudioSource(const QString& cardName);
     QString lastCaptureDevice() const;
     QString lastCaptureName() const { return QSettings().value("cap/name").toString(); }   // the card's name, for "continue"
@@ -694,6 +700,7 @@ signals:
     void inputPrefsChanged();
     void retroDiscChanged();
     void retroOptionsChanged();
+    void subtitleStyleChanged();
     void playersReset();                // a game starts: the controllers' next presses decide the players
     void subtitleChanged();
     void updateChanged();
